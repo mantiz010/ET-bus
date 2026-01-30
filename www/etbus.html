@@ -1,0 +1,871 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ElectronicsTech Bus</title>
+  <style>
+    :root{
+      --bg0:#000000;
+      --bg1:#05070b;
+      --bg2:#0b1a2e;
+
+      --card:rgba(17,24,36,.88);
+      --card2:rgba(13,18,28,.82);
+
+      --text:#e6edf3;
+      --muted:#9aa4b2;
+      --muted2:#6b7280;
+
+      --ok:#22c55e;
+      --bad:#ef4444;
+      --warn:#f59e0b;
+      --info:#38bdf8;
+
+      --line:rgba(255,255,255,.08);
+      --line2:rgba(255,255,255,.14);
+      --shadow:0 18px 45px rgba(0,0,0,.45);
+
+      --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+      --sans:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      --r:18px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background:
+        radial-gradient(1100px 700px at 20% -10%, rgba(56,189,248,.16), transparent 55%),
+        radial-gradient(900px 650px at 85% 0%, rgba(34,197,94,.10), transparent 60%),
+        linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 35%, var(--bg2) 100%);
+    }
+
+    header{
+      position:sticky; top:0; z-index:10;
+      border-bottom:1px solid var(--line);
+      background:rgba(6,8,12,.72);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    .head-inner{
+      padding:14px 14px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      max-width:1500px;
+      margin:0 auto;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px;
+      min-width:270px;
+    }
+    .logo{
+      width:34px; height:34px; border-radius:12px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(56,189,248,.9), rgba(56,189,248,.15) 55%, rgba(255,255,255,.06) 70%),
+        linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow: 0 10px 30px rgba(56,189,248,.12);
+      position:relative;
+      overflow:hidden;
+    }
+    .logo:after{
+      content:"";
+      position:absolute; inset:-30%;
+      background: conic-gradient(from 120deg, rgba(34,197,94,.0), rgba(34,197,94,.35), rgba(56,189,248,.0));
+      opacity:.35;
+      transform: rotate(18deg);
+    }
+    .brand-title{
+      display:flex; flex-direction:column; gap:2px;
+      line-height:1.1;
+    }
+    .brand-title b{ font-size:14px; letter-spacing:.3px; }
+    .brand-title span{ font-size:11px; color:var(--muted); }
+
+    .grow{ flex:1; }
+
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:7px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      font-size:12px;
+      color:var(--muted);
+      user-select:none;
+      white-space:nowrap;
+    }
+    .dot{
+      width:10px; height:10px; border-radius:999px;
+      background:var(--bad);
+      box-shadow:0 0 18px rgba(239,68,68,.45);
+    }
+    .dot.ok{ background:var(--ok); box-shadow:0 0 18px rgba(34,197,94,.45); }
+    .dot.warn{ background:var(--warn); box-shadow:0 0 18px rgba(245,158,11,.45); }
+
+    .btn{
+      cursor:pointer;
+      user-select:none;
+      padding:9px 11px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      font-size:12px;
+      transition: transform .06s ease, background .15s ease, border-color .15s ease;
+    }
+    .btn:hover{ background:rgba(255,255,255,.06); border-color:var(--line2); }
+    .btn:active{ transform: translateY(1px); }
+    .btn.primary{
+      border-color: rgba(56,189,248,.25);
+      background: rgba(56,189,248,.10);
+    }
+
+    main{
+      padding:14px;
+      display:grid;
+      gap:14px;
+      grid-template-columns: 1fr;
+      max-width:1500px;
+      margin:0 auto;
+    }
+    @media (min-width: 1100px){
+      main{ grid-template-columns: 1.35fr 0.65fr; }
+    }
+
+    .card{
+      background:rgba(17,24,36,.86);
+      border:1px solid var(--line);
+      border-radius:18px;
+      overflow:hidden;
+      box-shadow:var(--shadow);
+    }
+    .card-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px 14px;
+      border-bottom:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
+    }
+    .card-head h2{
+      margin:0;
+      font-size:13px;
+      letter-spacing:.45px;
+      color:var(--muted);
+      display:flex; align-items:center; gap:10px;
+    }
+
+    .mono{ font-family:var(--mono); }
+    .small{ color:var(--muted); font-size:11px; }
+
+    /* tiles */
+    .tiles{
+      padding:12px;
+      display:grid;
+      gap:10px;
+      grid-template-columns: repeat(2, 1fr);
+    }
+    @media (min-width: 520px){
+      .tiles{ grid-template-columns: repeat(4, 1fr); }
+    }
+    .tile{
+      background:var(--card2);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:10px 12px;
+      display:flex; flex-direction:column; gap:6px;
+      min-height:78px;
+    }
+    .tile .k{ font-size:11px; color:var(--muted); letter-spacing:.25px; }
+    .tile .v{ font-size:18px; font-weight:780; letter-spacing:.2px; }
+    .tile .s{ font-size:11px; color:var(--muted2); display:flex; align-items:center; gap:8px; }
+
+    .spark{
+      height:6px; border-radius:999px;
+      background:rgba(255,255,255,.06);
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.06);
+      flex:1;
+      min-width:80px;
+    }
+    .spark > i{
+      display:block; height:100%;
+      width:40%;
+      background: linear-gradient(90deg, rgba(56,189,248,.0), rgba(56,189,248,.8));
+      border-radius:999px;
+      filter: drop-shadow(0 0 10px rgba(56,189,248,.25));
+    }
+
+    /* device cards */
+    .devcards{
+      padding:12px;
+      display:grid;
+      gap:10px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 520px){
+      .devcards{ grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 900px){
+      .devcards{ grid-template-columns: repeat(3, 1fr); }
+    }
+    .devcard{
+      border:1px solid var(--line);
+      background: rgba(0,0,0,.15);
+      border-radius:16px;
+      padding:10px 12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      transition: border-color .15s ease, transform .06s ease, background .15s ease;
+    }
+    .devcard:hover{
+      border-color: var(--line2);
+      background: rgba(255,255,255,.03);
+    }
+    .devcard.offline{
+      opacity:.55;
+      filter: grayscale(.35);
+    }
+    .devtop{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .devname{
+      font-weight:750;
+      letter-spacing:.2px;
+      font-size:13px;
+    }
+    .devmeta{
+      color:var(--muted);
+      font-size:11px;
+      margin-top:2px;
+    }
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:5px 9px;
+      border-radius:999px;
+      font-size:11px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      color: var(--muted);
+      white-space:nowrap;
+    }
+    .badge .b{
+      width:8px; height:8px; border-radius:999px;
+      background: var(--warn);
+      box-shadow: 0 0 14px rgba(245,158,11,.35);
+    }
+    .badge.on .b{ background: var(--ok); box-shadow: 0 0 14px rgba(34,197,94,.35); }
+    .badge.off .b{ background: var(--bad); box-shadow: 0 0 14px rgba(239,68,68,.35); }
+
+    .devgrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:8px;
+    }
+    .kv{
+      border:1px solid rgba(255,255,255,.06);
+      background: rgba(255,255,255,.02);
+      border-radius:12px;
+      padding:8px 10px;
+      min-height:46px;
+    }
+    .kv .k{ font-size:10px; color:var(--muted2); letter-spacing:.25px; }
+    .kv .v{ font-size:12px; font-family:var(--mono); margin-top:4px; color:var(--text); }
+
+    /* table */
+    .table-wrap{ overflow:auto; border-top:1px solid var(--line); }
+    table{ width:100%; border-collapse:collapse; font-size:12px; }
+    th, td{
+      padding:11px 12px;
+      border-bottom:1px solid var(--line);
+      text-align:left;
+      vertical-align:top;
+      white-space:nowrap;
+    }
+    th{
+      color:var(--muted);
+      font-weight:650;
+      position:sticky; top:0;
+      background: rgba(6,8,12,.62);
+      backdrop-filter: blur(10px);
+    }
+    tr:hover td{ background: rgba(255,255,255,.02); }
+
+    .row-off{ opacity:.6; }
+
+    /* log */
+    pre{
+      margin:0;
+      padding:12px;
+      height:560px;
+      overflow:auto;
+      background:rgba(0,0,0,.23);
+      font-family:var(--mono);
+      font-size:11px;
+      line-height:1.48;
+    }
+    @media (max-width: 600px){ pre{ height:430px; } }
+
+    .controls{
+      padding:10px 12px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      border-top:1px solid var(--line);
+      background: rgba(255,255,255,.015);
+    }
+    input, select{
+      background:rgba(255,255,255,.03);
+      border:1px solid var(--line);
+      color:var(--text);
+      border-radius:12px;
+      padding:10px 11px;
+      font-size:12px;
+      outline:none;
+    }
+    input{
+      flex:1;
+      min-width:220px;
+    }
+    input:focus, select:focus{
+      border-color: rgba(56,189,248,.35);
+      box-shadow: 0 0 0 3px rgba(56,189,248,.08);
+    }
+    select{ min-width:160px; }
+
+    .footer{
+      padding:10px 14px;
+      border-top:1px solid var(--line);
+      color:var(--muted2);
+      font-size:11px;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .footer a{ color:rgba(56,189,248,.9); text-decoration:none; }
+    .footer a:hover{ text-decoration:underline; }
+
+    /* log type badge */
+    .tbadge{
+      display:inline-block;
+      padding:2px 7px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+      margin-right:6px;
+    }
+  </style>
+</head>
+
+<body>
+<header>
+  <div class="head-inner">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div class="brand-title">
+        <b>ElectronicsTech Bus</b>
+        <span>ET-Bus • Live Monitor</span>
+      </div>
+    </div>
+
+    <div class="chip" title="Websocket subscription status">
+      <div id="statusDot" class="dot"></div>
+      <span id="statusText">disconnected</span>
+    </div>
+
+    <div class="grow"></div>
+
+    <div class="chip"><span class="small">msgs</span>&nbsp;<b id="msgCount">0</b></div>
+    <div class="chip"><span class="small">rate</span>&nbsp;<b id="msgRate">0/s</b></div>
+    <div class="chip"><span class="small">devices</span>&nbsp;<b id="devCount">0</b></div>
+
+    <button class="btn" id="btnClear" title="Clear the log window">Clear</button>
+    <button class="btn primary" id="btnPause" title="Pause / resume live scrolling">Pause</button>
+  </div>
+</header>
+
+<main>
+  <!-- Left: Devices -->
+  <section class="card">
+    <div class="card-head">
+      <h2>Devices</h2>
+      <div class="small mono">events: <b>etbus_message</b> + <b>etbus_device_status</b></div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="k">Status</div>
+        <div class="v" id="tileStatus">—</div>
+        <div class="s"><span class="spark"><i id="sparkA"></i></span><span id="tileHint">waiting…</span></div>
+      </div>
+      <div class="tile">
+        <div class="k">Messages</div>
+        <div class="v" id="tileMsgs">0</div>
+        <div class="s">since open</div>
+      </div>
+      <div class="tile">
+        <div class="k">Devices Seen</div>
+        <div class="v" id="tileDevs">0</div>
+        <div class="s">unique ids</div>
+      </div>
+      <div class="tile">
+        <div class="k">Last Message</div>
+        <div class="v" id="tileLast">—</div>
+        <div class="s">time ago</div>
+      </div>
+    </div>
+
+    <!-- quick controls -->
+    <div class="controls" style="border-top:0; border-bottom:1px solid var(--line);">
+      <input id="devSearch" placeholder="Search devices… (relay1, air1, light.rgb)" />
+      <select id="sortBy" title="Sort devices">
+        <option value="online">Sort: Online first</option>
+        <option value="last">Sort: Last seen</option>
+        <option value="id">Sort: ID</option>
+        <option value="class">Sort: Class</option>
+      </select>
+
+      <!-- Fallback only. Once HA status events are seen, HA truth is used. -->
+      <select id="offlineAfter" title="Fallback: mark offline after no messages (used only if HA status is missing)">
+        <option value="15">Fallback offline after 15s</option>
+        <option value="25">Fallback offline after 25s</option>
+        <option value="60" selected>Fallback offline after 60s</option>
+      </select>
+    </div>
+
+    <!-- device cards -->
+    <div class="devcards" id="devCards"></div>
+
+    <!-- table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Device</th>
+            <th>Class</th>
+            <th>Last Seen</th>
+            <th>IP</th>
+            <th>RSSI</th>
+            <th>Uptime</th>
+          </tr>
+        </thead>
+        <tbody id="devBody"></tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      <div>© <a href="https://electronicstech.co.nz" target="_blank" rel="noreferrer">electronicstech.co.nz</a></div>
+      <div class="small mono" id="buildTag">ui-2.1 (status-truth)</div>
+    </div>
+  </section>
+
+  <!-- Right: Log -->
+  <section class="card">
+    <div class="card-head">
+      <h2>Stream Log</h2>
+      <div class="small">filter + pause (fast)</div>
+    </div>
+
+    <pre id="log"></pre>
+
+    <div class="controls">
+      <input id="filter" placeholder="Filter log… (air1, pong, command, light.rgb)" />
+      <button class="btn" id="btnCopy">Copy</button>
+    </div>
+
+    <div class="footer">
+      <div class="small">Log auto-trims to stay fast.</div>
+      <div class="small mono" id="logHint">—</div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const logEl = document.getElementById("log");
+  const devBody = document.getElementById("devBody");
+  const devCards = document.getElementById("devCards");
+
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+
+  const msgCountEl = document.getElementById("msgCount");
+  const msgRateEl = document.getElementById("msgRate");
+  const devCountEl = document.getElementById("devCount");
+
+  const filterEl = document.getElementById("filter");
+  const devSearchEl = document.getElementById("devSearch");
+  const sortByEl = document.getElementById("sortBy");
+  const offlineAfterEl = document.getElementById("offlineAfter");
+
+  const btnClear = document.getElementById("btnClear");
+  const btnPause = document.getElementById("btnPause");
+  const btnCopy = document.getElementById("btnCopy");
+
+  const tileStatus = document.getElementById("tileStatus");
+  const tileMsgs = document.getElementById("tileMsgs");
+  const tileDevs = document.getElementById("tileDevs");
+  const tileLast = document.getElementById("tileLast");
+  const tileHint = document.getElementById("tileHint");
+  const sparkA = document.getElementById("sparkA");
+  const logHint = document.getElementById("logHint");
+
+  let paused = false;
+
+  let msgCount = 0;
+  let lastMsgTs = 0;
+
+  // msg rate calc
+  let rateWindow = [];
+  function updateRate(){
+    const now = Date.now();
+    rateWindow = rateWindow.filter(t => (now - t) < 3000);
+    const r = (rateWindow.length / 3).toFixed(1);
+    msgRateEl.textContent = r + "/s";
+  }
+
+  // id -> device info
+  // onlineForced = HA truth from etbus_device_status
+  const devices = new Map();
+
+  function setStatus(kind, text) {
+    statusDot.classList.remove("ok","warn");
+    if (kind === "ok") statusDot.classList.add("ok");
+    else if (kind === "warn") statusDot.classList.add("warn");
+    statusText.textContent = text;
+
+    tileStatus.textContent = (kind === "ok") ? "Online" : (kind === "warn") ? "Waiting" : "Offline";
+    tileHint.textContent = text;
+  }
+
+  function nowTs(){ return Date.now(); }
+
+  function fmtAgo(ms){
+    const s = Math.floor(ms / 1000);
+    if (s < 2) return "now";
+    if (s < 60) return s + "s";
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + "m";
+    const h = Math.floor(m / 60);
+    return h + "h";
+  }
+
+  function badgeForType(t){
+    const safe = String(t || "").toLowerCase();
+    return `<span class="tbadge">${safe || "?"}</span>`;
+  }
+
+  function appendLog(line, type){
+    if (paused) return;
+
+    const f = (filterEl.value || "").trim().toLowerCase();
+    if (f && !line.toLowerCase().includes(f)) return;
+
+    logEl.textContent += badgeForType(type) + line + "\n";
+
+    if (logEl.textContent.length > 180000){
+      logEl.textContent = logEl.textContent.slice(-130000);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ✅ Option B: prefer HA truth when available
+  function computeOnline(d, now){
+    if (d.onlineForced !== undefined) return !!d.onlineForced;
+
+    // fallback: message-time based (only used before status events arrive)
+    const offlineAfter = parseInt(offlineAfterEl.value || "60", 10) * 1000;
+    if (!d.lastSeen) return false;
+    return (now - d.lastSeen) <= offlineAfter;
+  }
+
+  function sortedDevices(){
+    const q = (devSearchEl.value || "").trim().toLowerCase();
+    const sortBy = sortByEl.value;
+
+    let arr = Array.from(devices.values());
+
+    if (q){
+      arr = arr.filter(d =>
+        (d.id || "").toLowerCase().includes(q) ||
+        (d.cls || "").toLowerCase().includes(q) ||
+        (d.ip || "").toLowerCase().includes(q)
+      );
+    }
+
+    const now = nowTs();
+    for (const d of arr){
+      d.online = computeOnline(d, now);
+    }
+
+    if (sortBy === "online"){
+      arr.sort((a,b) => {
+        if (a.online !== b.online) return a.online ? -1 : 1;
+        return (b.lastSeen||0) - (a.lastSeen||0);
+      });
+    } else if (sortBy === "last"){
+      arr.sort((a,b) => (b.lastSeen||0) - (a.lastSeen||0));
+    } else if (sortBy === "class"){
+      arr.sort((a,b) => String(a.cls||"").localeCompare(String(b.cls||"")) || String(a.id||"").localeCompare(String(b.id||"")));
+    } else {
+      arr.sort((a,b) => String(a.id||"").localeCompare(String(b.id||"")));
+    }
+
+    return arr;
+  }
+
+  function renderDevices(){
+    const arr = sortedDevices();
+    const now = nowTs();
+
+    devCountEl.textContent = String(arr.length);
+    tileDevs.textContent = String(arr.length);
+    tileMsgs.textContent = String(msgCount);
+
+    if (lastMsgTs){
+      tileLast.textContent = fmtAgo(now - lastMsgTs);
+      const w = Math.min(100, Math.max(8, Math.floor((msgCount % 30) * 3.3)));
+      sparkA.style.width = w + "%";
+      logHint.textContent = "last msg " + fmtAgo(now - lastMsgTs) + " ago";
+    } else {
+      tileLast.textContent = "—";
+      sparkA.style.width = "18%";
+      logHint.textContent = "no messages yet";
+    }
+
+    // cards
+    const cardHtml = arr.map(d => {
+      const online = d.online;
+      const badge = online ? "on" : "off";
+      const btext = online ? "online" : "offline";
+      const ago = d.lastSeen ? fmtAgo(now - d.lastSeen) : "-";
+      const rssi = (d.rssi === undefined || d.rssi === null) ? "-" : d.rssi;
+      const up = (d.uptime === undefined || d.uptime === null) ? "-" : (d.uptime + "s");
+      const ip = d.ip || "-";
+      const cls = d.cls || "-";
+
+      let payloadPreview = "";
+      try{
+        if (d.lastPayload && typeof d.lastPayload === "object"){
+          const keys = Object.keys(d.lastPayload).slice(0,4);
+          payloadPreview = keys.map(k => `${k}:${d.lastPayload[k]}`).join(" • ");
+        }
+      }catch(_){}
+
+      return `
+        <div class="devcard ${online ? "" : "offline"}">
+          <div class="devtop">
+            <div>
+              <div class="devname mono">${d.id || "?"}</div>
+              <div class="devmeta mono">${cls}</div>
+            </div>
+            <span class="badge ${badge}"><span class="b"></span>${btext}</span>
+          </div>
+          <div class="devgrid">
+            <div class="kv"><div class="k">last seen</div><div class="v">${ago}</div></div>
+            <div class="kv"><div class="k">ip</div><div class="v">${ip}</div></div>
+            <div class="kv"><div class="k">rssi</div><div class="v">${rssi}</div></div>
+            <div class="kv"><div class="k">uptime</div><div class="v">${up}</div></div>
+          </div>
+          <div class="small mono" style="opacity:.9; margin-top:2px;">${payloadPreview ? ("last payload: " + payloadPreview) : ""}</div>
+        </div>
+      `;
+    }).join("");
+
+    devCards.innerHTML = cardHtml || `<div class="small" style="padding:12px">No ET-Bus messages yet…</div>`;
+
+    // table
+    const rows = arr.map(d => {
+      const online = d.online;
+      const ago = d.lastSeen ? fmtAgo(now - d.lastSeen) : "-";
+      const rssi = (d.rssi === undefined || d.rssi === null) ? "-" : d.rssi;
+      const up = (d.uptime === undefined || d.uptime === null) ? "-" : d.uptime + "s";
+      const ip = d.ip || "-";
+      const cls = d.cls || "-";
+
+      const status = online
+        ? `<span class="badge on"><span class="b"></span>online</span>`
+        : `<span class="badge off"><span class="b"></span>offline</span>`;
+
+      return `
+        <tr class="${online ? "" : "row-off"}">
+          <td>${status}</td>
+          <td class="mono"><b>${d.id}</b></td>
+          <td class="mono">${cls}</td>
+          <td>${ago}</td>
+          <td class="mono">${ip}</td>
+          <td class="mono">${rssi}</td>
+          <td class="mono">${up}</td>
+        </tr>
+      `;
+    }).join("");
+
+    devBody.innerHTML = rows || `
+      <tr><td colspan="7" class="small" style="padding:14px">No ET-Bus messages yet…</td></tr>
+    `;
+
+    // overall status
+    if (msgCount === 0) setStatus("warn","waiting for messages…");
+    else setStatus("ok", paused ? "paused" : "connected");
+  }
+
+  function getHassFromParent(){
+    const p = window.parent;
+    try{
+      const ha =
+        p.document.querySelector("home-assistant") ||
+        p.document.querySelector("home-assistant-main") ||
+        p.document.querySelector("home-assistant-app");
+      return (ha && ha.hass) ? ha.hass : null;
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function subscribe(){
+    const hass = getHassFromParent();
+    if (!hass || !hass.connection){
+      setStatus("warn","waiting for hass…");
+      setTimeout(subscribe, 700);
+      return;
+    }
+
+    setStatus("ok","connected");
+    appendLog(`[ui] connected to hass websocket`, "ui");
+
+    // ---- Stream: etbus_message (live packets)
+    try{
+      await hass.connection.subscribeEvents((ev) => {
+        const data = ev.data || {};
+        msgCount++;
+        lastMsgTs = nowTs();
+
+        rateWindow.push(lastMsgTs);
+        updateRate();
+
+        msgCountEl.textContent = String(msgCount);
+
+        const id = data.id || "?";
+        const cls = data.class || data.cls || "";
+        const type = data.type || "";
+        const ip = data._src_ip || "";
+        const rx = data._rx_ts ? Math.floor(data._rx_ts * 1000) : nowTs();
+        const payload = data.payload || {};
+
+        if (id && id !== "hub"){
+          const prev = devices.get(id) || { id };
+
+          // If packets are flowing, device is alive.
+          // If HA previously forced offline but we now have traffic, show online immediately.
+          let onlineForced = prev.onlineForced;
+          if (onlineForced === false){
+            onlineForced = true;
+          }
+
+          const next = {
+            id,
+            cls: cls || prev.cls,
+            ip: ip || prev.ip,
+            lastSeen: rx,
+            rssi: (payload && payload.rssi !== undefined) ? payload.rssi : prev.rssi,
+            uptime: (payload && payload.uptime !== undefined) ? payload.uptime : prev.uptime,
+            lastPayload: payload,
+            onlineForced,
+            lastStatusTs: prev.lastStatusTs,
+          };
+          devices.set(id, next);
+        }
+
+        const line = `[${new Date().toLocaleTimeString()}] ${id} ${type} ${cls} ` + JSON.stringify(payload);
+        appendLog(line, type);
+      }, "etbus_message");
+    }catch(e){
+      setStatus("warn","subscribe failed");
+      appendLog(`[ui] subscribe etbus_message failed: ${e}`, "ui");
+      setTimeout(subscribe, 1200);
+      return;
+    }
+
+    // ---- Stream: etbus_device_status (HA truth)
+    try{
+      await hass.connection.subscribeEvents((ev) => {
+        const data = ev.data || {};
+        const id = data.id;
+        if (!id || id === "hub") return;
+
+        const prev = devices.get(id) || { id };
+        devices.set(id, {
+          ...prev,
+          onlineForced: !!data.online,
+          lastStatusTs: Date.now(),
+        });
+
+        // Optional status log (commented)
+        // appendLog(`[${new Date().toLocaleTimeString()}] ${id} status online=${!!data.online} reason=${data.reason||""}`, "status");
+      }, "etbus_device_status");
+    }catch(e){
+      appendLog(`[ui] subscribe etbus_device_status failed: ${e}`, "ui");
+    }
+
+    // periodic renders so fallback offline marking works
+    setInterval(renderDevices, 500);
+  }
+
+  btnClear.onclick = () => { logEl.textContent = ""; };
+
+  btnPause.onclick = () => {
+    paused = !paused;
+    btnPause.textContent = paused ? "Resume" : "Pause";
+    setStatus(paused ? "warn" : "ok", paused ? "paused" : "connected");
+  };
+
+  btnCopy.onclick = async () => {
+    const text = logEl.textContent || "";
+    try{
+      await navigator.clipboard.writeText(text);
+      appendLog("[ui] copied to clipboard", "ui");
+      return;
+    }catch(_){
+      try{
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        appendLog("[ui] copied to clipboard (fallback)", "ui");
+      }catch(__){
+        appendLog("[ui] clipboard blocked", "ui");
+      }
+    }
+  };
+
+  // re-render on UI changes
+  devSearchEl.addEventListener("input", renderDevices);
+  sortByEl.addEventListener("change", renderDevices);
+  offlineAfterEl.addEventListener("change", renderDevices);
+  filterEl.addEventListener("input", () => {}); // log filter is live while appending
+
+  renderDevices();
+  subscribe();
+})();
+</script>
+</body>
+</html>
