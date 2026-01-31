@@ -4,8 +4,8 @@
 // -----------------------------
 // HARD-CODED WIFI CREDENTIALS
 // -----------------------------
-static const char* WIFI_SSID = "mantiz010";
-static const char* WIFI_PASS = "DavidCross010";
+static const char* WIFI_SSID = "home";
+static const char* WIFI_PASS = "test";
 
 // ✅ SAFE GPIO (not a boot strap pin)
 static const int RELAY_PIN = 26;
