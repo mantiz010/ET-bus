@@ -1,10 +1,12 @@
 #include "ETBus.h"
 
+// Defaults match the Home Assistant ET-Bus hub
 static IPAddress ETBUS_MCAST(239, 10, 0, 1);
 static const uint16_t ETBUS_PORT = 5555;
 
-// Library heartbeat; keep at 30s to match your HA offline timeout logic.
-// (You can reduce to 10s later if you want faster online detection.)
+// Library heartbeat.
+// Keep this aligned with your HA OFFLINE_TIMEOUT.
+// Example: if OFFLINE_TIMEOUT=75s, then 30s pong is fine.
 static const uint32_t PONG_INTERVAL_MS = 30000;
 
 ETBus::ETBus() {}
@@ -30,10 +32,10 @@ void ETBus::begin(const char* device_id,
   // Commercial-grade Wi-Fi UDP stability
   setWifiNoSleep(true);
 
-  // ESP32 Arduino core 2.0.17: beginMulticast(multicast_ip, port)
+  // ESP32 Arduino core 2.0.x: beginMulticast(multicast_ip, port)
   _udp.beginMulticast(ETBUS_MCAST, ETBUS_PORT);
 
-  // announce
+  // Announce
   sendDiscover();
   sendPong();
   _lastPongMs = millis();
@@ -58,7 +60,7 @@ void ETBus::_learnHub(const IPAddress& from, const char* msg_type) {
 void ETBus::loop() {
   int size = _udp.parsePacket();
   if (size > 0) {
-    StaticJsonDocument<768> doc;
+    StaticJsonDocument<896> doc;
     DeserializationError err = deserializeJson(doc, _udp);
     if (!err) {
       const int v = doc["v"] | 0;
@@ -72,7 +74,7 @@ void ETBus::loop() {
         }
       }
 
-      // Dispatch commands
+      // Dispatch commands (HA -> device)
       if (v == 1 && strcmp(type, "command") == 0) {
         if (_cmdHandler) {
           JsonObject payload = doc["payload"].as<JsonObject>();
@@ -82,7 +84,7 @@ void ETBus::loop() {
     }
   }
 
-  // Heartbeat pong
+  // Heartbeat
   unsigned long now = millis();
   if (now - _lastPongMs >= PONG_INTERVAL_MS) {
     sendPong();
@@ -101,14 +103,14 @@ void ETBus::sendDiscover() {
   payload["name"] = _name;
   payload["fw"] = _fw;
 
-  // ESP32 has no beginPacketMulticast(); just send to multicast IP
+  // Discover is multicast so the hub can learn device IP immediately
   _udp.beginPacket(ETBUS_MCAST, ETBUS_PORT);
   serializeJson(doc, _udp);
   _udp.endPacket();
 }
 
 void ETBus::sendPong() {
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<512> doc;
   doc["v"] = 1;
   doc["type"] = "pong";
   doc["id"] = _id;
@@ -118,6 +120,7 @@ void ETBus::sendPong() {
   payload["uptime"] = (uint32_t)(millis() / 1000);
   payload["rssi"] = WiFi.RSSI();
   payload["name"] = _name;
+  payload["fw"] = _fw;
 
   // Once hub known -> UNICAST (fixes Wi-Fi multicast stall problems)
   if (_hubKnown) {
@@ -131,7 +134,7 @@ void ETBus::sendPong() {
 }
 
 void ETBus::_sendEnvelope(const char* type, JsonObject payload, bool allow_multicast) {
-  StaticJsonDocument<768> doc;
+  StaticJsonDocument<896> doc;
   doc["v"] = 1;
   doc["type"] = type;
   doc["id"] = _id;
@@ -141,9 +144,9 @@ void ETBus::_sendEnvelope(const char* type, JsonObject payload, bool allow_multi
   for (JsonPair kv : payload) {
     out[kv.key()] = kv.value();
   }
-
-  // always include a stable name so HA can show friendly names
+  // Always include a stable name so HA can show friendly names
   out["name"] = _name;
+  out["fw"] = _fw;
 
   if (_hubKnown) {
     _udp.beginPacket(_hubIP, ETBUS_PORT);
@@ -158,31 +161,48 @@ void ETBus::_sendEnvelope(const char* type, JsonObject payload, bool allow_multi
 }
 
 void ETBus::sendState(JsonObject payload) {
-  // allow multicast only as a fallback until hub is learned
+  // Allow multicast only as fallback until hub is learned
   _sendEnvelope("state", payload, true);
 }
 
 // ----------------------------
-// Helpers for your framework
+// Helpers
 // ----------------------------
+
 void ETBus::sendSwitchState(bool on) {
-  StaticJsonDocument<128> p;
+  StaticJsonDocument<160> p;
   p["on"] = on;
   sendState(p.as<JsonObject>());
 }
 
 void ETBus::sendRgbState(bool on, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness) {
-  StaticJsonDocument<192> p;
+  sendRgbStateFx(on, r, g, b, brightness, nullptr, 0);
+}
+
+void ETBus::sendRgbStateFx(bool on,
+                          uint8_t r,
+                          uint8_t g,
+                          uint8_t b,
+                          uint8_t brightness,
+                          const char* effect,
+                          uint8_t speed) {
+  StaticJsonDocument<320> p;
   p["on"] = on;
   p["r"] = r;
   p["g"] = g;
   p["b"] = b;
   p["brightness"] = brightness;
+  if (effect && *effect) {
+    p["effect"] = effect;
+  }
+  if (speed > 0) {
+    p["speed"] = speed;
+  }
   sendState(p.as<JsonObject>());
 }
 
 void ETBus::sendFanState(bool on, const char* preset) {
-  StaticJsonDocument<160> p;
+  StaticJsonDocument<192> p;
   p["on"] = on;
   p["preset"] = (preset && *preset) ? preset : (on ? "low" : "off");
   sendState(p.as<JsonObject>());
