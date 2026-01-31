@@ -5,8 +5,8 @@
 // -----------------------------
 // HARD-CODED WIFI
 // -----------------------------
-static const char* WIFI_SSID = "mantiz010";
-static const char* WIFI_PASS = "DavidCross010";
+static const char* WIFI_SSID = "home";
+static const char* WIFI_PASS = "test";
 
 // -----------------------------
 // WS2812B CONFIG
