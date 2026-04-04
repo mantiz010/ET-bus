@@ -180,3 +180,4 @@ class EtBusValueSensor(SensorEntity):
 
         if self.hass is not None:
             self.async_write_ha_state()
+
