@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 DOMAIN = "etbus"
 
-MULTICAST_GROUP = "239.10.0.1"
-MULTICAST_PORT = 5555
+DEFAULT_HOST_MCAST = "239.10.0.1"
+DEFAULT_PORT = 5555
 
-# Hub multicast ping interval (devices learn hub IP from this)
-PING_INTERVAL = 10
+PING_INTERVAL = 10          # seconds
+OFFLINE_TIMEOUT = 25        # seconds
 
-# IMPORTANT: Match Arduino heartbeat (PONG_INTERVAL_MS = 30000)
-# Rule: OFFLINE_TIMEOUT >= 3 * pong interval seconds
-# 3 * 30s = 90s, plus buffer => 95s
-OFFLINE_TIMEOUT = 95
+CONF_PORT = "port"
+CONF_CRYPTO_ENABLED = "crypto_enabled"
+CONF_PSK_HEX = "psk_hex"
+
+ETBUS_KID = 1
