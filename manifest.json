@@ -1,7 +1,7 @@
 {
   "domain": "etbus",
   "name": "ET-Bus (ElectronicsTech Bus)",
-  "version": "0.2.0",
+  "version": "1.0.1",
   "documentation": "https://electronicstech.co.nz",
   "codeowners": ["@mantiz010"],
   "requirements": [],
