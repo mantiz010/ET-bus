@@ -1,869 +1,1386 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ElectronicsTech Bus</title>
-  <style>
-    :root{
-      --bg0:#000000;
-      --bg1:#05070b;
-      --bg2:#0b1a2e;
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ET-Bus Network Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-      --card:rgba(17,24,36,.88);
-      --card2:rgba(13,18,28,.82);
+        :root {
+            /* Brand Colors from Logo */
+            --brand-blue: #2196F3;
+            --brand-blue-light: #42A5F5;
+            --brand-blue-dark: #1976D2;
+            --brand-gray: #424242;
+            --brand-gray-light: #616161;
+            
+            /* Professional Dark Theme */
+            --bg-primary: #0a0e14;
+            --bg-secondary: #151a21;
+            --bg-tertiary: #1e242d;
+            --bg-card: #1a1f26;
+            --border-color: #2d3642;
+            --border-hover: var(--brand-blue);
+            
+            /* Text */
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-tertiary: #6e7681;
+            
+            /* Status Colors */
+            --status-online: #3fb950;
+            --status-offline: #f85149;
+            --status-warning: #d29922;
+            
+            /* Charts */
+            --chart-1: var(--brand-blue);
+            --chart-2: #bc8cff;
+            --chart-3: #3fb950;
+            --chart-4: #d29922;
+        }
 
-      --text:#e6edf3;
-      --muted:#9aa4b2;
-      --muted2:#6b7280;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
 
-      --ok:#22c55e;
-      --bad:#ef4444;
-      --warn:#f59e0b;
-      --info:#38bdf8;
+        /* Professional Header with Logo */
+        .header {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border-bottom: 2px solid var(--brand-blue);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
 
-      --line:rgba(255,255,255,.08);
-      --line2:rgba(255,255,255,.14);
-      --shadow:0 18px 45px rgba(0,0,0,.45);
+        .header-content {
+            max-width: 1800px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-      --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-      --sans:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      --r:18px;
-    }
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
 
-    *{ box-sizing:border-box; }
-    body{
-      margin:0;
-      font-family:var(--sans);
-      color:var(--text);
-      background:
-        radial-gradient(1100px 700px at 20% -10%, rgba(56,189,248,.16), transparent 55%),
-        radial-gradient(900px 650px at 85% 0%, rgba(34,197,94,.10), transparent 60%),
-        linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 35%, var(--bg2) 100%);
-    }
+        .logo-container {
+            background: #000;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            border: 2px solid var(--brand-blue);
+            box-shadow: 0 0 20px rgba(33, 150, 243, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
-    header{
-      position:sticky; top:0; z-index:10;
-      border-bottom:1px solid var(--line);
-      background:rgba(6,8,12,.72);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-    }
-    .head-inner{
-      padding:14px 14px;
-      display:flex;
-      align-items:center;
-      gap:12px;
-      max-width:1500px;
-      margin:0 auto;
-    }
-    .brand{
-      display:flex; align-items:center; gap:12px;
-      min-width:270px;
-    }
-    .logo{
-      width:34px; height:34px; border-radius:12px;
-      background:
-        radial-gradient(circle at 30% 30%, rgba(56,189,248,.9), rgba(56,189,248,.15) 55%, rgba(255,255,255,.06) 70%),
-        linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
-      border:1px solid rgba(255,255,255,.12);
-      box-shadow: 0 10px 30px rgba(56,189,248,.12);
-      position:relative;
-      overflow:hidden;
-    }
-    .logo:after{
-      content:"";
-      position:absolute; inset:-30%;
-      background: conic-gradient(from 120deg, rgba(34,197,94,.0), rgba(34,197,94,.35), rgba(56,189,248,.0));
-      opacity:.35;
-      transform: rotate(18deg);
-    }
-    .brand-title{
-      display:flex; flex-direction:column; gap:2px;
-      line-height:1.1;
-    }
-    .brand-title b{ font-size:14px; letter-spacing:.3px; }
-    .brand-title span{ font-size:11px; color:var(--muted); }
+        .logo-icon {
+            font-size: 2rem;
+        }
 
-    .grow{ flex:1; }
+        .logo-text {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
 
-    .chip{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:7px 10px;
-      border-radius:999px;
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.03);
-      font-size:12px;
-      color:var(--muted);
-      user-select:none;
-      white-space:nowrap;
-    }
-    .dot{
-      width:10px; height:10px; border-radius:999px;
-      background:var(--bad);
-      box-shadow:0 0 18px rgba(239,68,68,.45);
-    }
-    .dot.ok{ background:var(--ok); box-shadow:0 0 18px rgba(34,197,94,.45); }
-    .dot.warn{ background:var(--warn); box-shadow:0 0 18px rgba(245,158,11,.45); }
+        .logo-text .et {
+            color: var(--brand-blue);
+        }
 
-    .btn{
-      cursor:pointer;
-      user-select:none;
-      padding:9px 11px;
-      border-radius:12px;
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.03);
-      color:var(--text);
-      font-size:12px;
-      transition: transform .06s ease, background .15s ease, border-color .15s ease;
-    }
-    .btn:hover{ background:rgba(255,255,255,.06); border-color:var(--line2); }
-    .btn:active{ transform: translateY(1px); }
-    .btn.primary{
-      border-color: rgba(56,189,248,.25);
-      background: rgba(56,189,248,.10);
-    }
+        .logo-text .bus {
+            color: var(--brand-gray-light);
+        }
 
-    main{
-      padding:14px;
-      display:grid;
-      gap:14px;
-      grid-template-columns: 1fr;
-      max-width:1500px;
-      margin:0 auto;
-    }
-    @media (min-width: 1100px){
-      main{ grid-template-columns: 1.35fr 0.65fr; }
-    }
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
 
-    .card{
-      background:rgba(17,24,36,.86);
-      border:1px solid var(--line);
-      border-radius:18px;
-      overflow:hidden;
-      box-shadow:var(--shadow);
-    }
-    .card-head{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      padding:12px 14px;
-      border-bottom:1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
-    }
-    .card-head h2{
-      margin:0;
-      font-size:13px;
-      letter-spacing:.45px;
-      color:var(--muted);
-      display:flex; align-items:center; gap:10px;
-    }
+        .header-stats {
+            display: flex;
+            gap: 2.5rem;
+            align-items: center;
+        }
 
-    .mono{ font-family:var(--mono); }
-    .small{ color:var(--muted); font-size:11px; }
+        .header-stat {
+            text-align: center;
+        }
 
-    /* tiles */
-    .tiles{
-      padding:12px;
-      display:grid;
-      gap:10px;
-      grid-template-columns: repeat(2, 1fr);
-    }
-    @media (min-width: 520px){
-      .tiles{ grid-template-columns: repeat(4, 1fr); }
-    }
-    .tile{
-      background:var(--card2);
-      border:1px solid var(--line);
-      border-radius:16px;
-      padding:10px 12px;
-      display:flex; flex-direction:column; gap:6px;
-      min-height:78px;
-    }
-    .tile .k{ font-size:11px; color:var(--muted); letter-spacing:.25px; }
-    .tile .v{ font-size:18px; font-weight:780; letter-spacing:.2px; }
-    .tile .s{ font-size:11px; color:var(--muted2); display:flex; align-items:center; gap:8px; }
+        .header-stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--brand-blue), var(--brand-blue-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
 
-    .spark{
-      height:6px; border-radius:999px;
-      background:rgba(255,255,255,.06);
-      overflow:hidden;
-      border:1px solid rgba(255,255,255,.06);
-      flex:1;
-      min-width:80px;
-    }
-    .spark > i{
-      display:block; height:100%;
-      width:40%;
-      background: linear-gradient(90deg, rgba(56,189,248,.0), rgba(56,189,248,.8));
-      border-radius:999px;
-      filter: drop-shadow(0 0 10px rgba(56,189,248,.25));
-    }
+        .header-stat-label {
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 0.25rem;
+        }
 
-    /* device cards */
-    .devcards{
-      padding:12px;
-      display:grid;
-      gap:10px;
-      grid-template-columns: 1fr;
-    }
-    @media (min-width: 520px){
-      .devcards{ grid-template-columns: repeat(2, 1fr); }
-    }
-    @media (min-width: 900px){
-      .devcards{ grid-template-columns: repeat(3, 1fr); }
-    }
-    .devcard{
-      border:1px solid var(--line);
-      background: rgba(0,0,0,.15);
-      border-radius:16px;
-      padding:10px 12px;
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-      transition: border-color .15s ease, transform .06s ease, background .15s ease;
-    }
-    .devcard:hover{
-      border-color: var(--line2);
-      background: rgba(255,255,255,.03);
-    }
-    .devcard.offline{
-      opacity:.55;
-      filter: grayscale(.35);
-    }
-    .devtop{
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:10px;
-    }
-    .devname{
-      font-weight:750;
-      letter-spacing:.2px;
-      font-size:13px;
-    }
-    .devmeta{
-      color:var(--muted);
-      font-size:11px;
-      margin-top:2px;
-    }
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      padding:5px 9px;
-      border-radius:999px;
-      font-size:11px;
-      border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
-      color: var(--muted);
-      white-space:nowrap;
-    }
-    .badge .b{
-      width:8px; height:8px; border-radius:999px;
-      background: var(--warn);
-      box-shadow: 0 0 14px rgba(245,158,11,.35);
-    }
-    .badge.on .b{ background: var(--ok); box-shadow: 0 0 14px rgba(34,197,94,.35); }
-    .badge.off .b{ background: var(--bad); box-shadow: 0 0 14px rgba(239,68,68,.35); }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--status-online);
+            display: inline-block;
+            margin-right: 0.5rem;
+            animation: pulse 2s infinite;
+        }
 
-    .devgrid{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:8px;
-    }
-    .kv{
-      border:1px solid rgba(255,255,255,.06);
-      background: rgba(255,255,255,.02);
-      border-radius:12px;
-      padding:8px 10px;
-      min-height:46px;
-    }
-    .kv .k{ font-size:10px; color:var(--muted2); letter-spacing:.25px; }
-    .kv .v{ font-size:12px; font-family:var(--mono); margin-top:4px; color:var(--text); }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
 
-    /* table */
-    .table-wrap{ overflow:auto; border-top:1px solid var(--line); }
-    table{ width:100%; border-collapse:collapse; font-size:12px; }
-    th, td{
-      padding:11px 12px;
-      border-bottom:1px solid var(--line);
-      text-align:left;
-      vertical-align:top;
-      white-space:nowrap;
-    }
-    th{
-      color:var(--muted);
-      font-weight:650;
-      position:sticky; top:0;
-      background: rgba(6,8,12,.62);
-      backdrop-filter: blur(10px);
-    }
-    tr:hover td{ background: rgba(255,255,255,.02); }
+        /* Main Container */
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
 
-    .row-off{ opacity:.6; }
+        /* Dashboard Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
 
-    /* log */
-    pre{
-      margin:0;
-      padding:12px;
-      height:560px;
-      overflow:auto;
-      background:rgba(0,0,0,.23);
-      font-family:var(--mono);
-      font-size:11px;
-      line-height:1.48;
-    }
-    @media (max-width: 600px){ pre{ height:430px; } }
+        @media (max-width: 1400px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
 
-    .controls{
-      padding:10px 12px;
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-      border-top:1px solid var(--line);
-      background: rgba(255,255,255,.015);
-    }
-    input, select{
-      background:rgba(255,255,255,.03);
-      border:1px solid var(--line);
-      color:var(--text);
-      border-radius:12px;
-      padding:10px 11px;
-      font-size:12px;
-      outline:none;
-    }
-    input{
-      flex:1;
-      min-width:220px;
-    }
-    input:focus, select:focus{
-      border-color: rgba(56,189,248,.35);
-      box-shadow: 0 0 0 3px rgba(56,189,248,.08);
-    }
-    select{ min-width:160px; }
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
 
-    .footer{
-      padding:10px 14px;
-      border-top:1px solid var(--line);
-      color:var(--muted2);
-      font-size:11px;
-      display:flex;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .footer a{ color:rgba(56,189,248,.9); text-decoration:none; }
-    .footer a:hover{ text-decoration:underline; }
+        /* Professional Metric Cards */
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
 
-    /* log type badge */
-    .tbadge{
-      display:inline-block;
-      padding:2px 7px;
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.03);
-      margin-right:6px;
-    }
-  </style>
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--brand-blue), var(--brand-blue-light));
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--brand-blue);
+            box-shadow: 0 8px 30px rgba(33, 150, 243, 0.2);
+        }
+
+        .metric-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .metric-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            background: linear-gradient(135deg, rgba(33, 150, 243, 0.2), rgba(33, 150, 243, 0.05));
+            border: 1px solid rgba(33, 150, 243, 0.3);
+        }
+
+        .metric-trend {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .metric-trend.up {
+            background: rgba(63, 185, 80, 0.1);
+            color: var(--status-online);
+        }
+
+        .metric-trend.down {
+            background: rgba(248, 81, 73, 0.1);
+            color: var(--status-offline);
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--text-primary), var(--brand-blue-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .metric-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .metric-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+        }
+
+        /* Main Content Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 1200px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Professional Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .card-badge {
+            background: var(--bg-tertiary);
+            padding: 0.375rem 0.875rem;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--brand-blue);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Device Grid */
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+            max-height: 600px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .devices-grid::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .devices-grid::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+
+        .devices-grid::-webkit-scrollbar-thumb {
+            background: var(--brand-blue);
+            border-radius: 4px;
+        }
+
+        /* Device Card */
+        .device-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .device-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--status-online);
+            border-radius: 8px 0 0 8px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .device-card.online::after {
+            opacity: 1;
+            background: var(--status-online);
+        }
+
+        .device-card.offline::after {
+            opacity: 1;
+            background: var(--status-offline);
+        }
+
+        .device-card:hover {
+            transform: translateX(4px);
+            border-color: var(--brand-blue);
+            box-shadow: 0 4px 16px rgba(33, 150, 243, 0.2);
+        }
+
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .device-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .device-class {
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        .device-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.675rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .device-status.online {
+            background: rgba(63, 185, 80, 0.15);
+            color: var(--status-online);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+        }
+
+        .device-status.offline {
+            background: rgba(248, 81, 73, 0.15);
+            color: var(--status-offline);
+            border: 1px solid rgba(248, 81, 73, 0.3);
+        }
+
+        .device-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .device-stat {
+            background: var(--bg-secondary);
+            padding: 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .device-stat-label {
+            font-size: 0.65rem;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.25rem;
+        }
+
+        .device-stat-value {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--brand-blue);
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        /* Message Log */
+        .log-container {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            height: 700px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-toolbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.625rem 1rem 0.625rem 2.5rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--brand-blue);
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+
+        .search-box::before {
+            content: '🔍';
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .btn {
+            padding: 0.625rem 1.25rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background: var(--border-color);
+            border-color: var(--brand-blue);
+            transform: translateY(-1px);
+        }
+
+        .btn.active {
+            background: var(--brand-blue);
+            border-color: var(--brand-blue);
+            color: white;
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+        }
+
+        .btn-primary {
+            background: var(--brand-blue);
+            border-color: var(--brand-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--brand-blue-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .log-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .log-messages::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .log-messages::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .log-messages::-webkit-scrollbar-thumb {
+            background: var(--brand-blue);
+            border-radius: 5px;
+        }
+
+        .log-entry {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--brand-blue);
+            border-radius: 6px;
+            padding: 0.875rem;
+            margin-bottom: 0.75rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.813rem;
+            transition: all 0.2s ease;
+            animation: slideIn 0.3s ease;
+            display: grid;
+            grid-template-columns: 90px 120px 80px 120px 1fr;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .log-entry:hover {
+            background: var(--bg-tertiary);
+            border-left-width: 6px;
+            transform: translateX(4px);
+        }
+
+        .log-entry.state { border-left-color: var(--brand-blue); }
+        .log-entry.command { border-left-color: #bc8cff; }
+        .log-entry.ping { border-left-color: var(--status-online); }
+        .log-entry.discover { border-left-color: var(--status-warning); }
+
+        .log-time {
+            color: var(--text-tertiary);
+            font-size: 0.75rem;
+        }
+
+        .log-device {
+            color: var(--brand-blue);
+            font-weight: 600;
+        }
+
+        .log-type {
+            padding: 0.25rem 0.625rem;
+            border-radius: 6px;
+            font-size: 0.688rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            text-align: center;
+            letter-spacing: 0.5px;
+        }
+
+        .log-type.state {
+            background: rgba(33, 150, 243, 0.15);
+            color: var(--brand-blue);
+        }
+
+        .log-type.command {
+            background: rgba(188, 140, 255, 0.15);
+            color: #bc8cff;
+        }
+
+        .log-type.ping {
+            background: rgba(63, 185, 80, 0.15);
+            color: var(--status-online);
+        }
+
+        .log-type.discover {
+            background: rgba(210, 153, 34, 0.15);
+            color: var(--status-warning);
+        }
+
+        .log-class {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .log-payload {
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-tertiary);
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .empty-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(33, 150, 243, 0.2);
+            border-top-color: var(--brand-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Export Menu */
+        .export-menu {
+            position: relative;
+        }
+
+        .export-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            min-width: 200px;
+            display: none;
+            z-index: 100;
+        }
+
+        .export-dropdown.active {
+            display: block;
+        }
+
+        .export-option {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .export-option:last-child {
+            border-bottom: none;
+        }
+
+        .export-option:hover {
+            background: var(--bg-tertiary);
+            color: var(--brand-blue);
+        }
+    </style>
 </head>
-
 <body>
-<header>
-  <div class="head-inner">
-    <div class="brand">
-      <div class="logo" aria-hidden="true"></div>
-      <div class="brand-title">
-        <b>ElectronicsTech Bus</b>
-        <span>ET-Bus • Live Monitor</span>
-      </div>
-    </div>
-
-    <div class="chip" title="Websocket subscription status">
-      <div id="statusDot" class="dot"></div>
-      <span id="statusText">disconnected</span>
-    </div>
-
-    <div class="grow"></div>
-
-    <div class="chip"><span class="small">msgs</span>&nbsp;<b id="msgCount">0</b></div>
-    <div class="chip"><span class="small">rate</span>&nbsp;<b id="msgRate">0/s</b></div>
-    <div class="chip"><span class="small">devices</span>&nbsp;<b id="devCount">0</b></div>
-
-    <button class="btn" id="btnClear" title="Clear the log window">Clear</button>
-    <button class="btn primary" id="btnPause" title="Pause / resume live scrolling">Pause</button>
-  </div>
-</header>
-
-<main>
-  <!-- Left: Devices -->
-  <section class="card">
-    <div class="card-head">
-      <h2>Devices</h2>
-      <div class="small mono">events: <b>etbus_message</b> + <b>etbus_device_status</b></div>
-    </div>
-
-    <div class="tiles">
-      <div class="tile">
-        <div class="k">Status</div>
-        <div class="v" id="tileStatus">—</div>
-        <div class="s"><span class="spark"><i id="sparkA"></i></span><span id="tileHint">waiting…</span></div>
-      </div>
-      <div class="tile">
-        <div class="k">Messages</div>
-        <div class="v" id="tileMsgs">0</div>
-        <div class="s">since open</div>
-      </div>
-      <div class="tile">
-        <div class="k">Devices Seen</div>
-        <div class="v" id="tileDevs">0</div>
-        <div class="s">unique ids</div>
-      </div>
-      <div class="tile">
-        <div class="k">Last Message</div>
-        <div class="v" id="tileLast">—</div>
-        <div class="s">time ago</div>
-      </div>
-    </div>
-
-    <!-- quick controls -->
-    <div class="controls" style="border-top:0; border-bottom:1px solid var(--line);">
-      <input id="devSearch" placeholder="Search devices… (relay1, air1, light.rgb)" />
-      <select id="sortBy" title="Sort devices">
-        <option value="online">Sort: Online first</option>
-        <option value="last">Sort: Last seen</option>
-        <option value="id">Sort: ID</option>
-        <option value="class">Sort: Class</option>
-      </select>
-
-      <!-- Fallback only. Once HA status events are seen, HA truth is used. -->
-      <select id="offlineAfter" title="Fallback: mark offline after no messages (used only if HA status is missing)">
-        <option value="15">Fallback offline after 15s</option>
-        <option value="25">Fallback offline after 25s</option>
-        <option value="60" selected>Fallback offline after 60s</option>
-      </select>
-    </div>
-
-    <!-- device cards -->
-    <div class="devcards" id="devCards"></div>
-
-    <!-- table -->
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th>Device</th>
-            <th>Class</th>
-            <th>Last Seen</th>
-            <th>IP</th>
-            <th>RSSI</th>
-            <th>Uptime</th>
-          </tr>
-        </thead>
-        <tbody id="devBody"></tbody>
-      </table>
-    </div>
-
-    <div class="footer">
-      <div>© <a href="https://electronicstech.co.nz" target="_blank" rel="noreferrer">electronicstech.co.nz</a></div>
-      <div class="small mono" id="buildTag">ui-2.1 (status-truth)</div>
-    </div>
-  </section>
-
-  <!-- Right: Log -->
-  <section class="card">
-    <div class="card-head">
-      <h2>Stream Log</h2>
-      <div class="small">filter + pause (fast)</div>
-    </div>
-
-    <pre id="log"></pre>
-
-    <div class="controls">
-      <input id="filter" placeholder="Filter log… (air1, pong, command, light.rgb)" />
-      <button class="btn" id="btnCopy">Copy</button>
-    </div>
-
-    <div class="footer">
-      <div class="small">Log auto-trims to stay fast.</div>
-      <div class="small mono" id="logHint">—</div>
-    </div>
-  </section>
-</main>
-
-<script>
-(() => {
-  const logEl = document.getElementById("log");
-  const devBody = document.getElementById("devBody");
-  const devCards = document.getElementById("devCards");
-
-  const statusDot = document.getElementById("statusDot");
-  const statusText = document.getElementById("statusText");
-
-  const msgCountEl = document.getElementById("msgCount");
-  const msgRateEl = document.getElementById("msgRate");
-  const devCountEl = document.getElementById("devCount");
-
-  const filterEl = document.getElementById("filter");
-  const devSearchEl = document.getElementById("devSearch");
-  const sortByEl = document.getElementById("sortBy");
-  const offlineAfterEl = document.getElementById("offlineAfter");
-
-  const btnClear = document.getElementById("btnClear");
-  const btnPause = document.getElementById("btnPause");
-  const btnCopy = document.getElementById("btnCopy");
-
-  const tileStatus = document.getElementById("tileStatus");
-  const tileMsgs = document.getElementById("tileMsgs");
-  const tileDevs = document.getElementById("tileDevs");
-  const tileLast = document.getElementById("tileLast");
-  const tileHint = document.getElementById("tileHint");
-  const sparkA = document.getElementById("sparkA");
-  const logHint = document.getElementById("logHint");
-
-  let paused = false;
-
-  let msgCount = 0;
-  let lastMsgTs = 0;
-
-  // msg rate calc
-  let rateWindow = [];
-  function updateRate(){
-    const now = Date.now();
-    rateWindow = rateWindow.filter(t => (now - t) < 3000);
-    const r = (rateWindow.length / 3).toFixed(1);
-    msgRateEl.textContent = r + "/s";
-  }
-
-  // id -> device info
-  // onlineForced = HA truth from etbus_device_status
-  const devices = new Map();
-
-  function setStatus(kind, text) {
-    statusDot.classList.remove("ok","warn");
-    if (kind === "ok") statusDot.classList.add("ok");
-    else if (kind === "warn") statusDot.classList.add("warn");
-    statusText.textContent = text;
-
-    tileStatus.textContent = (kind === "ok") ? "Online" : (kind === "warn") ? "Waiting" : "Offline";
-    tileHint.textContent = text;
-  }
-
-  function nowTs(){ return Date.now(); }
-
-  function fmtAgo(ms){
-    const s = Math.floor(ms / 1000);
-    if (s < 2) return "now";
-    if (s < 60) return s + "s";
-    const m = Math.floor(s / 60);
-    if (m < 60) return m + "m";
-    const h = Math.floor(m / 60);
-    return h + "h";
-  }
-
-  function badgeForType(t){
-    const safe = String(t || "").toLowerCase();
-    return `<span class="tbadge">${safe || "?"}</span>`;
-  }
-
-  function appendLog(line, type){
-    if (paused) return;
-
-    const f = (filterEl.value || "").trim().toLowerCase();
-    if (f && !line.toLowerCase().includes(f)) return;
-
-    logEl.textContent += badgeForType(type) + line + "\n";
-
-    if (logEl.textContent.length > 180000){
-      logEl.textContent = logEl.textContent.slice(-130000);
-    }
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  // ✅ Option B: prefer HA truth when available
-  function computeOnline(d, now){
-    if (d.onlineForced !== undefined) return !!d.onlineForced;
-
-    // fallback: message-time based (only used before status events arrive)
-    const offlineAfter = parseInt(offlineAfterEl.value || "60", 10) * 1000;
-    if (!d.lastSeen) return false;
-    return (now - d.lastSeen) <= offlineAfter;
-  }
-
-  function sortedDevices(){
-    const q = (devSearchEl.value || "").trim().toLowerCase();
-    const sortBy = sortByEl.value;
-
-    let arr = Array.from(devices.values());
-
-    if (q){
-      arr = arr.filter(d =>
-        (d.id || "").toLowerCase().includes(q) ||
-        (d.cls || "").toLowerCase().includes(q) ||
-        (d.ip || "").toLowerCase().includes(q)
-      );
-    }
-
-    const now = nowTs();
-    for (const d of arr){
-      d.online = computeOnline(d, now);
-    }
-
-    if (sortBy === "online"){
-      arr.sort((a,b) => {
-        if (a.online !== b.online) return a.online ? -1 : 1;
-        return (b.lastSeen||0) - (a.lastSeen||0);
-      });
-    } else if (sortBy === "last"){
-      arr.sort((a,b) => (b.lastSeen||0) - (a.lastSeen||0));
-    } else if (sortBy === "class"){
-      arr.sort((a,b) => String(a.cls||"").localeCompare(String(b.cls||"")) || String(a.id||"").localeCompare(String(b.id||"")));
-    } else {
-      arr.sort((a,b) => String(a.id||"").localeCompare(String(b.id||"")));
-    }
-
-    return arr;
-  }
-
-  function renderDevices(){
-    const arr = sortedDevices();
-    const now = nowTs();
-
-    devCountEl.textContent = String(arr.length);
-    tileDevs.textContent = String(arr.length);
-    tileMsgs.textContent = String(msgCount);
-
-    if (lastMsgTs){
-      tileLast.textContent = fmtAgo(now - lastMsgTs);
-      const w = Math.min(100, Math.max(8, Math.floor((msgCount % 30) * 3.3)));
-      sparkA.style.width = w + "%";
-      logHint.textContent = "last msg " + fmtAgo(now - lastMsgTs) + " ago";
-    } else {
-      tileLast.textContent = "—";
-      sparkA.style.width = "18%";
-      logHint.textContent = "no messages yet";
-    }
-
-    // cards
-    const cardHtml = arr.map(d => {
-      const online = d.online;
-      const badge = online ? "on" : "off";
-      const btext = online ? "online" : "offline";
-      const ago = d.lastSeen ? fmtAgo(now - d.lastSeen) : "-";
-      const rssi = (d.rssi === undefined || d.rssi === null) ? "-" : d.rssi;
-      const up = (d.uptime === undefined || d.uptime === null) ? "-" : (d.uptime + "s");
-      const ip = d.ip || "-";
-      const cls = d.cls || "-";
-
-      let payloadPreview = "";
-      try{
-        if (d.lastPayload && typeof d.lastPayload === "object"){
-          const keys = Object.keys(d.lastPayload).slice(0,4);
-          payloadPreview = keys.map(k => `${k}:${d.lastPayload[k]}`).join(" • ");
-        }
-      }catch(_){}
-
-      return `
-        <div class="devcard ${online ? "" : "offline"}">
-          <div class="devtop">
-            <div>
-              <div class="devname mono">${d.id || "?"}</div>
-              <div class="devmeta mono">${cls}</div>
+    <!-- Professional Header with Logo -->
+    <div class="header">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="logo-container">
+                    <div class="logo-icon">🔒</div>
+                    <div class="logo-text">
+                        <span class="et">ET</span><span class="bus">-Bus</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="subtitle">
+                        <span class="status-indicator"></span>
+                        Network Monitor Professional
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.25rem;">
+                        Encrypted IoT Communication Platform
+                    </div>
+                </div>
             </div>
-            <span class="badge ${badge}"><span class="b"></span>${btext}</span>
-          </div>
-          <div class="devgrid">
-            <div class="kv"><div class="k">last seen</div><div class="v">${ago}</div></div>
-            <div class="kv"><div class="k">ip</div><div class="v">${ip}</div></div>
-            <div class="kv"><div class="k">rssi</div><div class="v">${rssi}</div></div>
-            <div class="kv"><div class="k">uptime</div><div class="v">${up}</div></div>
-          </div>
-          <div class="small mono" style="opacity:.9; margin-top:2px;">${payloadPreview ? ("last payload: " + payloadPreview) : ""}</div>
+            <div class="header-stats">
+                <div class="header-stat">
+                    <div class="header-stat-value" id="header-online">0</div>
+                    <div class="header-stat-label">Online</div>
+                </div>
+                <div class="header-stat">
+                    <div class="header-stat-value" id="header-messages">0</div>
+                    <div class="header-stat-label">Messages</div>
+                </div>
+                <div class="header-stat">
+                    <div class="header-stat-value" id="header-rate">0/s</div>
+                    <div class="header-stat-label">Rate</div>
+                </div>
+            </div>
         </div>
-      `;
-    }).join("");
+    </div>
 
-    devCards.innerHTML = cardHtml || `<div class="small" style="padding:12px">No ET-Bus messages yet…</div>`;
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Dashboard Metrics -->
+        <div class="dashboard-grid">
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div class="metric-icon">🟢</div>
+                    <div class="metric-trend up">
+                        <span>↑</span>
+                        <span id="online-trend">0%</span>
+                    </div>
+                </div>
+                <div class="metric-value" id="metric-online">0</div>
+                <div class="metric-label">Devices Online</div>
+                <div class="metric-footer">
+                    <span>Total Devices</span>
+                    <span id="metric-total-devices">0</span>
+                </div>
+            </div>
 
-    // table
-    const rows = arr.map(d => {
-      const online = d.online;
-      const ago = d.lastSeen ? fmtAgo(now - d.lastSeen) : "-";
-      const rssi = (d.rssi === undefined || d.rssi === null) ? "-" : d.rssi;
-      const up = (d.uptime === undefined || d.uptime === null) ? "-" : d.uptime + "s";
-      const ip = d.ip || "-";
-      const cls = d.cls || "-";
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div class="metric-icon">📊</div>
+                    <div class="metric-trend up">
+                        <span>↑</span>
+                        <span id="messages-trend">0%</span>
+                    </div>
+                </div>
+                <div class="metric-value" id="metric-messages">0</div>
+                <div class="metric-label">Total Messages</div>
+                <div class="metric-footer">
+                    <span>Last Hour</span>
+                    <span id="metric-last-hour">0</span>
+                </div>
+            </div>
 
-      const status = online
-        ? `<span class="badge on"><span class="b"></span>online</span>`
-        : `<span class="badge off"><span class="b"></span>offline</span>`;
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div class="metric-icon">🔐</div>
+                    <div class="metric-trend up">
+                        <span>↑</span>
+                        <span>100%</span>
+                    </div>
+                </div>
+                <div class="metric-value" id="metric-encrypted">0</div>
+                <div class="metric-label">Encrypted Messages</div>
+                <div class="metric-footer">
+                    <span>Security</span>
+                    <span>ChaCha20-Poly1305</span>
+                </div>
+            </div>
 
-      return `
-        <tr class="${online ? "" : "row-off"}">
-          <td>${status}</td>
-          <td class="mono"><b>${d.id}</b></td>
-          <td class="mono">${cls}</td>
-          <td>${ago}</td>
-          <td class="mono">${ip}</td>
-          <td class="mono">${rssi}</td>
-          <td class="mono">${up}</td>
-        </tr>
-      `;
-    }).join("");
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div class="metric-icon">⚡</div>
+                    <div class="metric-trend up">
+                        <span>↑</span>
+                        <span id="rate-trend">0%</span>
+                    </div>
+                </div>
+                <div class="metric-value" id="metric-rate">0</div>
+                <div class="metric-label">Messages/Min</div>
+                <div class="metric-footer">
+                    <span>Peak Rate</span>
+                    <span id="metric-peak">0/min</span>
+                </div>
+            </div>
+        </div>
 
-    devBody.innerHTML = rows || `
-      <tr><td colspan="7" class="small" style="padding:14px">No ET-Bus messages yet…</td></tr>
-    `;
+        <!-- Main Content -->
+        <div class="content-grid">
+            <!-- Devices Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        🔌 Connected Devices
+                        <span class="card-badge" id="device-count">0</span>
+                    </h2>
+                    <div class="btn-group">
+                        <button class="btn active" onclick="sortDevices('status')">Status</button>
+                        <button class="btn" onclick="sortDevices('name')">Name</button>
+                        <button class="btn" onclick="sortDevices('recent')">Recent</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="devices-grid" id="devices-list">
+                        <div class="empty-state">
+                            <div class="empty-icon">📡</div>
+                            <div class="empty-title">No Devices Connected</div>
+                            <div>Waiting for devices to come online...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-    // overall status
-    if (msgCount === 0) setStatus("warn","waiting for messages…");
-    else setStatus("ok", paused ? "paused" : "connected");
-  }
+            <!-- Message Log Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        📨 Live Message Stream
+                        <span class="card-badge" id="message-count">0</span>
+                    </h2>
+                    <div class="btn-group">
+                        <button class="btn" id="pause-btn" onclick="togglePause()">⏸️ Pause</button>
+                        <div class="export-menu">
+                            <button class="btn btn-primary" onclick="toggleExport()">
+                                📥 Export
+                            </button>
+                            <div class="export-dropdown" id="export-menu">
+                                <div class="export-option" onclick="exportData('json')">
+                                    📄 Export as JSON
+                                </div>
+                                <div class="export-option" onclick="exportData('csv')">
+                                    📊 Export as CSV
+                                </div>
+                                <div class="export-option" onclick="exportData('txt')">
+                                    📝 Export as TXT
+                                </div>
+                                <div class="export-option" onclick="copyLog()">
+                                    📋 Copy to Clipboard
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn" onclick="clearLog()">🗑️ Clear</button>
+                    </div>
+                </div>
+                <div class="log-container">
+                    <div class="log-toolbar">
+                        <div class="search-box">
+                            <input 
+                                type="text" 
+                                id="search-input" 
+                                placeholder="Search messages..."
+                                onkeyup="filterMessages()"
+                            >
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn active" data-filter="all" onclick="setFilter('all')">All</button>
+                            <button class="btn" data-filter="state" onclick="setFilter('state')">State</button>
+                            <button class="btn" data-filter="command" onclick="setFilter('command')">Command</button>
+                            <button class="btn" data-filter="ping" onclick="setFilter('ping')">Ping</button>
+                        </div>
+                    </div>
+                    <div class="log-messages" id="log-messages">
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <div class="empty-title">No Messages Yet</div>
+                            <div>Message stream will appear here...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-  function getHassFromParent(){
-    const p = window.parent;
-    try{
-      const ha =
-        p.document.querySelector("home-assistant") ||
-        p.document.querySelector("home-assistant-main") ||
-        p.document.querySelector("home-assistant-app");
-      return (ha && ha.hass) ? ha.hass : null;
-    }catch(e){
-      return null;
-    }
-  }
+    <script>
+        // State Management
+        const state = {
+            devices: {},
+            messages: [],
+            paused: false,
+            filter: 'all',
+            searchTerm: '',
+            sortBy: 'status',
+            messageCount: 0,
+            encryptedCount: 0,
+            startTime: Date.now(),
+            lastHourMessages: [],
+            peakRate: 0
+        };
 
-  async function subscribe(){
-    const hass = getHassFromParent();
-    if (!hass || !hass.connection){
-      setStatus("warn","waiting for hass…");
-      setTimeout(subscribe, 700);
-      return;
-    }
+        // WebSocket Connection
+        let ws = null;
+        let reconnectTimer = null;
 
-    setStatus("ok","connected");
-    appendLog(`[ui] connected to hass websocket`, "ui");
+        function connectWebSocket() {
+            console.log('🔌 Connecting to WebSocket...');
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            const port = window.location.port || (protocol === 'wss:' ? '443' : '8123');
+            const wsUrl = `${protocol}//${host}:${port}/api/websocket`;
+            
+            console.log('📡 WebSocket URL:', wsUrl);
+            ws = new WebSocket(wsUrl);
 
-    // ---- Stream: etbus_message (live packets)
-    try{
-      await hass.connection.subscribeEvents((ev) => {
-        const data = ev.data || {};
-        msgCount++;
-        lastMsgTs = nowTs();
+            ws.onopen = () => {
+                console.log('✅ WebSocket CONNECTED!');
+                clearTimeout(reconnectTimer);
+            };
 
-        rateWindow.push(lastMsgTs);
-        updateRate();
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                console.log('📨 Received:', msg.type);
+                
+                if (msg.type === 'auth_required') {
+                    console.log('🔐 Auth required, sending token...');
+                    const token = getAuthToken();
+                    ws.send(JSON.stringify({
+                        type: 'auth',
+                        access_token: token
+                    }));
+                    console.log('📤 Auth sent');
+                    
+                } else if (msg.type === 'auth_ok') {
+                    console.log('✅ AUTH SUCCESS!');
+                    console.log('📤 Subscribing to etbus_message...');
+                    ws.send(JSON.stringify({
+                        id: 1,
+                        type: 'subscribe_events',
+                        event_type: 'etbus_message'
+                    }));
+                    console.log('📤 Subscribing to etbus_device_status...');
+                    ws.send(JSON.stringify({
+                        id: 2,
+                        type: 'subscribe_events',
+                        event_type: 'etbus_device_status'
+                    }));
+                    
+                } else if (msg.type === 'result') {
+                    if (msg.success) {
+                        console.log(`✅ Subscription ${msg.id} successful!`);
+                    }
+                    
+                } else if (msg.type === 'event') {
+                    console.log('📬 Event:', msg.event.event_type);
+                    handleEvent(msg.event);
+                }
+            };
 
-        msgCountEl.textContent = String(msgCount);
+            ws.onclose = () => {
+                console.log('🔌 WebSocket closed, reconnecting...');
+                reconnectTimer = setTimeout(connectWebSocket, 3000);
+            };
 
-        const id = data.id || "?";
-        const cls = data.class || data.cls || "";
-        const type = data.type || "";
-        const ip = data._src_ip || "";
-        const rx = data._rx_ts ? Math.floor(data._rx_ts * 1000) : nowTs();
-        const payload = data.payload || {};
-
-        if (id && id !== "hub"){
-          const prev = devices.get(id) || { id };
-
-          // If packets are flowing, device is alive.
-          // If HA previously forced offline but we now have traffic, show online immediately.
-          let onlineForced = prev.onlineForced;
-          if (onlineForced === false){
-            onlineForced = true;
-          }
-
-          const next = {
-            id,
-            cls: cls || prev.cls,
-            ip: ip || prev.ip,
-            lastSeen: rx,
-            rssi: (payload && payload.rssi !== undefined) ? payload.rssi : prev.rssi,
-            uptime: (payload && payload.uptime !== undefined) ? payload.uptime : prev.uptime,
-            lastPayload: payload,
-            onlineForced,
-            lastStatusTs: prev.lastStatusTs,
-          };
-          devices.set(id, next);
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket error:', error);
+            };
         }
 
-        const line = `[${new Date().toLocaleTimeString()}] ${id} ${type} ${cls} ` + JSON.stringify(payload);
-        appendLog(line, type);
-      }, "etbus_message");
-    }catch(e){
-      setStatus("warn","subscribe failed");
-      appendLog(`[ui] subscribe etbus_message failed: ${e}`, "ui");
-      setTimeout(subscribe, 1200);
-      return;
-    }
+        function getAuthToken() {
+            // Try parent window first (works in iframe!)
+            try {
+                if (window.parent && window.parent !== window) {
+                    const hassTokens = window.parent.localStorage?.getItem('hassTokens');
+                    if (hassTokens) {
+                        const tokens = JSON.parse(hassTokens);
+                        if (tokens?.access_token) {
+                            console.log('🔑 Got token from parent window');
+                            return tokens.access_token;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('⚠️ Could not access parent window:', e.message);
+            }
+            
+            // Try URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            if (token) {
+                console.log('🔑 Token from URL');
+                localStorage.setItem('ha_token', token);
+                return token;
+            }
+            
+            // Try localStorage
+            const stored = localStorage.getItem('ha_token');
+            if (stored) {
+                console.log('🔑 Token from localStorage');
+                return stored;
+            }
+            
+            console.warn('⚠️ No token found!');
+            return '';
+        }
 
-    // ---- Stream: etbus_device_status (HA truth)
-    try{
-      await hass.connection.subscribeEvents((ev) => {
-        const data = ev.data || {};
-        const id = data.id;
-        if (!id || id === "hub") return;
+        function handleEvent(event) {
+            if (event.event_type === 'etbus_message') {
+                handleMessage(event.data);
+            } else if (event.event_type === 'etbus_device_status') {
+                handleDeviceStatus(event.data);
+            }
+        }
 
-        const prev = devices.get(id) || { id };
-        devices.set(id, {
-          ...prev,
-          onlineForced: !!data.online,
-          lastStatusTs: Date.now(),
+        function handleMessage(data) {
+            console.log('🔵 handleMessage called:', data.id, data.type);
+            state.messageCount++;
+            
+            // ⭐ Check if message was encrypted (hub sets this flag)
+            if (data._encrypted) {
+                state.encryptedCount++;
+            }
+
+            const entry = {
+                time: new Date(),
+                id: data.id,
+                type: data.type,
+                class: data.class || '',
+                payload: data.payload,
+                srcIp: data._src_ip,
+                encrypted: data._encrypted || false  // ⭐ Store encryption status
+            };
+
+            state.messages.unshift(entry);
+            state.lastHourMessages.push({time: Date.now(), entry});
+            
+            // Clean old messages
+            const oneHourAgo = Date.now() - (60 * 60 * 1000);
+            state.lastHourMessages = state.lastHourMessages.filter(m => m.time > oneHourAgo);
+            
+            if (state.messages.length > 500) {
+                state.messages.pop();
+            }
+
+            if (!state.paused) {
+                addLogEntry(entry);
+            }
+
+            updateMetrics();
+        }
+
+        function handleDeviceStatus(data) {
+            console.log('🟢 handleDeviceStatus called:', data.id, data.online ? 'online' : 'offline');
+            const devId = data.id;
+            const online = data.online !== false;
+
+            if (!state.devices[devId]) {
+                state.devices[devId] = {
+                    id: devId,
+                    online: online,
+                    ip: data.ip || 'Unknown',
+                    class: '',
+                    lastSeen: new Date(),
+                    rssi: null,
+                    uptime: null
+                };
+                console.log('➕ New device added:', devId);
+            } else {
+                state.devices[devId].online = online;
+                if (data.ip) state.devices[devId].ip = data.ip;
+                state.devices[devId].lastSeen = new Date();
+            }
+
+            renderDevices();
+            updateMetrics();
+        }
+
+        function addLogEntry(entry) {
+            const container = document.getElementById('log-messages');
+            
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            if (state.filter !== 'all' && entry.type !== state.filter) {
+                return;
+            }
+
+            if (state.searchTerm) {
+                const searchText = JSON.stringify(entry).toLowerCase();
+                if (!searchText.includes(state.searchTerm.toLowerCase())) {
+                    return;
+                }
+            }
+
+            const div = document.createElement('div');
+            div.className = `log-entry ${entry.type}`;
+            
+            const timeStr = entry.time.toLocaleTimeString('en-US', { hour12: false });
+            const payloadStr = JSON.stringify(entry.payload).substring(0, 80);
+            const encIcon = entry.encrypted ? '🔒 ' : '';  // ⭐ Show lock if encrypted
+
+            div.innerHTML = `
+                <span class="log-time">${timeStr}</span>
+                <span class="log-device">${encIcon}${entry.id}</span>
+                <span class="log-type ${entry.type}">${entry.type}</span>
+                <span class="log-class">${entry.class}</span>
+                <span class="log-payload">${payloadStr}</span>
+            `;
+
+            container.insertBefore(div, container.firstChild);
+
+            while (container.children.length > 100) {
+                container.removeChild(container.lastChild);
+            }
+
+            document.getElementById('message-count').textContent = state.messages.length;
+        }
+
+        function renderDevices() {
+            const container = document.getElementById('devices-list');
+            container.innerHTML = '';
+
+            const devices = Object.values(state.devices);
+            
+            if (devices.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📡</div>
+                        <div class="empty-title">No Devices Connected</div>
+                        <div>Waiting for devices to come online...</div>
+                    </div>
+                `;
+                return;
+            }
+
+            devices.sort((a, b) => {
+                if (state.sortBy === 'status') {
+                    if (a.online !== b.online) return b.online - a.online;
+                    return b.lastSeen - a.lastSeen;
+                } else if (state.sortBy === 'name') {
+                    return a.id.localeCompare(b.id);
+                } else if (state.sortBy === 'recent') {
+                    return b.lastSeen - a.lastSeen;
+                }
+            });
+
+            devices.forEach(device => {
+                const timeSince = Math.floor((Date.now() - device.lastSeen.getTime()) / 1000);
+                const timeStr = timeSince < 60 ? `${timeSince}s` : `${Math.floor(timeSince / 60)}m`;
+
+                const div = document.createElement('div');
+                div.className = `device-card ${device.online ? 'online' : 'offline'}`;
+                div.innerHTML = `
+                    <div class="device-header">
+                        <div>
+                            <div class="device-name">${device.id}</div>
+                            <div class="device-class">${device.class || 'Unknown'}</div>
+                        </div>
+                        <span class="device-status ${device.online ? 'online' : 'offline'}">
+                            ${device.online ? 'Online' : 'Offline'}
+                        </span>
+                    </div>
+                    <div class="device-stats">
+                        <div class="device-stat">
+                            <div class="device-stat-label">IP Address</div>
+                            <div class="device-stat-value">${device.ip}</div>
+                        </div>
+                        <div class="device-stat">
+                            <div class="device-stat-label">Last Seen</div>
+                            <div class="device-stat-value">${timeStr} ago</div>
+                        </div>
+                        ${device.rssi ? `
+                        <div class="device-stat">
+                            <div class="device-stat-label">Signal</div>
+                            <div class="device-stat-value">${device.rssi} dBm</div>
+                        </div>
+                        ` : ''}
+                        ${device.uptime ? `
+                        <div class="device-stat">
+                            <div class="device-stat-label">Uptime</div>
+                            <div class="device-stat-value">${Math.floor(device.uptime/60)}m</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            document.getElementById('device-count').textContent = devices.length;
+        }
+
+        function updateMetrics() {
+            const online = Object.values(state.devices).filter(d => d.online).length;
+            const total = Object.keys(state.devices).length;
+            
+            // Header
+            document.getElementById('header-online').textContent = online;
+            document.getElementById('header-messages').textContent = state.messageCount;
+            
+            // Metrics
+            document.getElementById('metric-online').textContent = online;
+            document.getElementById('metric-total-devices').textContent = total;
+            document.getElementById('metric-messages').textContent = state.messageCount;
+            document.getElementById('metric-encrypted').textContent = state.encryptedCount;
+            document.getElementById('metric-last-hour').textContent = state.lastHourMessages.length;
+            
+            // Rates
+            const elapsed = (Date.now() - state.startTime) / 1000;
+            const rate = elapsed > 0 ? (state.messageCount / elapsed).toFixed(1) : 0;
+            const ratePerMin = elapsed > 0 ? Math.round((state.messageCount / elapsed) * 60) : 0;
+            
+            document.getElementById('header-rate').textContent = `${rate}/s`;
+            document.getElementById('metric-rate').textContent = ratePerMin;
+            
+            if (ratePerMin > state.peakRate) {
+                state.peakRate = ratePerMin;
+                document.getElementById('metric-peak').textContent = `${state.peakRate}/min`;
+            }
+        }
+
+        function togglePause() {
+            state.paused = !state.paused;
+            const btn = document.getElementById('pause-btn');
+            btn.innerHTML = state.paused ? '▶️ Resume' : '⏸️ Pause';
+            btn.classList.toggle('active');
+        }
+
+        function clearLog() {
+            document.getElementById('log-messages').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <div class="empty-title">No Messages Yet</div>
+                    <div>Message stream will appear here...</div>
+                </div>
+            `;
+            state.messages = [];
+            document.getElementById('message-count').textContent = '0';
+        }
+
+        function copyLog() {
+            const text = state.messages.map(m => 
+                `[${m.time.toISOString()}] ${m.id} ${m.type} ${m.class} ${JSON.stringify(m.payload)}`
+            ).join('\n');
+            navigator.clipboard.writeText(text);
+            alert('✅ Log copied to clipboard!');
+        }
+
+        function setFilter(filter) {
+            state.filter = filter;
+            document.querySelectorAll('[data-filter]').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+            filterMessages();
+        }
+
+        function filterMessages() {
+            state.searchTerm = document.getElementById('search-input').value;
+            const container = document.getElementById('log-messages');
+            container.innerHTML = '';
+            
+            state.messages.forEach(msg => {
+                addLogEntry(msg);
+            });
+        }
+
+        function sortDevices(sortBy) {
+            state.sortBy = sortBy;
+            renderDevices();
+        }
+
+        function toggleExport() {
+            const menu = document.getElementById('export-menu');
+            menu.classList.toggle('active');
+        }
+
+        function exportData(format) {
+            toggleExport();
+            
+            if (format === 'json') {
+                const data = JSON.stringify(state.messages, null, 2);
+                downloadFile(data, 'etbus-log.json', 'application/json');
+            } else if (format === 'csv') {
+                let csv = 'Time,Device,Type,Class,Payload\n';
+                state.messages.forEach(m => {
+                    csv += `${m.time.toISOString()},${m.id},${m.type},${m.class},"${JSON.stringify(m.payload)}"\n`;
+                });
+                downloadFile(csv, 'etbus-log.csv', 'text/csv');
+            } else if (format === 'txt') {
+                const text = state.messages.map(m => 
+                    `[${m.time.toISOString()}] ${m.id} ${m.type} ${m.class} ${JSON.stringify(m.payload)}`
+                ).join('\n');
+                downloadFile(text, 'etbus-log.txt', 'text/plain');
+            }
+        }
+
+        function downloadFile(content, filename, type) {
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Click outside to close export menu
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.export-menu')) {
+                document.getElementById('export-menu').classList.remove('active');
+            }
         });
 
-        // Optional status log (commented)
-        // appendLog(`[${new Date().toLocaleTimeString()}] ${id} status online=${!!data.online} reason=${data.reason||""}`, "status");
-      }, "etbus_device_status");
-    }catch(e){
-      appendLog(`[ui] subscribe etbus_device_status failed: ${e}`, "ui");
-    }
+        // Initialize
+        connectWebSocket();
+        setInterval(updateMetrics, 1000);
+        setInterval(renderDevices, 5000);
+    </script>
+</body>
+</html>
 
-    // periodic renders so fallback offline marking works
-    setInterval(renderDevices, 500);
-  }
-
-  btnClear.onclick = () => { logEl.textContent = ""; };
-
-  btnPause.onclick = () => {
-    paused = !paused;
-    btnPause.textContent = paused ? "Resume" : "Pause";
-    setStatus(paused ? "warn" : "ok", paused ? "paused" : "connected");
-  };
-
-  btnCopy.onclick = async () => {
-    const text = logEl.textContent || "";
-    try{
-      await navigator.clipboard.writeText(text);
-      appendLog("[ui] copied to clipboard", "ui");
-      return;
-    }catch(_){
-      try{
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        ta.style.top = "0";
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        appendLog("[ui] copied to clipboard (fallback)", "ui");
-      }catch(__){
-        appendLog("[ui] clipboard blocked", "ui");
-      }
-    }
-  };
-
-  // re-render on UI changes
-  devSearchEl.addEventListener("input", renderDevices);
-  sortByEl.addEventListener("change", renderDevices);
-  offlineAfterEl.addEventListener("change", renderDevices);
-  filterEl.addEventListener("input", () => {}); // log filter is live while appending
-
-  renderDevices();
   subscribe();
 })();
 </script>
