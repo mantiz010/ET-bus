@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 import logging
 from typing import Any
 
@@ -18,10 +17,56 @@ from .const import DOMAIN
 from .hub import EtBusHub
 
 _LOGGER = logging.getLogger(__name__)
-_RESYNC_COOLDOWN_S = 6.0
 
-# MUST match Arduino effect names EXACTLY
-DEFAULT_EFFECTS = ["solid", "rainbow", "cylon", "confetti", "pulse"]
+# ✨ 35 PROFESSIONAL LIGHTING EFFECTS! ✨
+DEFAULT_EFFECTS = [
+    # ===== SOLID & BASIC (5) =====
+    "solid",           # Static color
+    "white",           # Pure white
+    "warm_white",      # Warm white tone
+    "cool_white",      # Cool white tone
+    "night_light",     # Dim warm glow
+    
+    # ===== RAINBOW & COLOR (5) =====
+    "rainbow",         # Full spectrum rainbow
+    "rainbow_cycle",   # Smooth rainbow transitions
+    "color_wipe",      # Color fills LED by LED
+    "color_chase",     # Single color chasing
+    "color_bounce",    # Color bounces back and forth
+    
+    # ===== ANIMATED PATTERNS (10) =====
+    "cylon",           # KITT scanner effect
+    "scanner",         # Larson scanner
+    "theater_chase",   # Theater marquee lights
+    "twinkle",         # Random twinkling stars
+    "sparkle",         # Random sparkles
+    "confetti",        # Random colored dots
+    "juggle",          # Colored dots weaving
+    "pulse",           # Smooth breathing pulse
+    "heartbeat",       # Double pulse heartbeat
+    "strobe",          # Fast flashing
+    
+    # ===== RUNNING & CHASING (5) =====
+    "running_lights",  # Smooth wave motion
+    "comet",           # Comet tail effect
+    "meteor",          # Meteor rain
+    "chase",           # Multi-color chase
+    "fire",            # Realistic fire flicker
+    
+    # ===== ADVANCED EFFECTS (5) =====
+    "aurora",          # Northern lights shimmer
+    "plasma",          # Plasma cloud effect
+    "pride",           # Pride rainbow colors
+    "lava",            # Lava lamp flow
+    "ocean",           # Ocean wave effect
+    
+    # ===== SEASONAL & SPECIAL (5) =====
+    "christmas",       # Red/green alternating
+    "halloween",       # Orange/purple spooky
+    "police",          # Red/blue flashing
+    "ambulance",       # Red/white flashing
+    "party",           # Multi-color party mode
+]
 
 
 async def async_setup_entry(
@@ -47,57 +92,63 @@ async def async_setup_entry(
             if dev_id not in entities:
                 name = payload.get("name", dev_id)
                 effects = payload.get("effects") or DEFAULT_EFFECTS
-                ent = EtBusRgbLight(hub, dev_id, name, effects)
+
+                # Restore last known state from hub's persisted device states
+                saved = hub.get_last_reported_state(dev_id)
+                ent = EtBusRgbLight(hub, dev_id, name, effects, saved)
                 entities[dev_id] = ent
                 async_add_entities([ent])
-                _LOGGER.info("ET-Bus: discovered RGB light %s", dev_id)
+                _LOGGER.info("ET-Bus: discovered RGB light %s with %s effects", dev_id, len(effects))
 
+            # Always update HA entity from device-reported state
             entities[dev_id].handle_state(payload)
 
-    @callback
-    def handle_status_event(ev) -> None:
-        data = ev.data or {}
-        dev_id = data.get("id")
-        reason = data.get("reason", "")
-        ent = entities.get(dev_id)
-
-        if ent:
-            ent.async_write_ha_state()
-            if reason in ("discover", "pong", "online", "new"):
-                ent.maybe_resync_to_device(reason)
-
     hub.register_listener(handle_message)
-    hass.bus.async_listen("etbus_device_status", handle_status_event)
 
 
 class EtBusRgbLight(LightEntity):
     _attr_should_poll = False
     _attr_color_mode = ColorMode.RGB
     _attr_supported_color_modes = {ColorMode.RGB}
-
-    # 🔥 THIS IS THE MISSING PIECE
     _attr_supported_features = LightEntityFeature.EFFECT
 
-    def __init__(self, hub: EtBusHub, dev_id: str, name: str, effects: list[str]):
+    def __init__(
+        self,
+        hub: EtBusHub,
+        dev_id: str,
+        name: str,
+        effects: list[str],
+        saved_state: dict[str, Any] | None = None,
+    ):
         self._hub = hub
         self._dev_id = dev_id
         self._attr_name = name
 
+        # Default state
         self._is_on = False
         self._rgb = (255, 255, 255)
         self._brightness = 255
-
-        self._effect_list = list(effects or DEFAULT_EFFECTS)
         self._effect = "solid"
         self._speed = 120
 
-        self._last_resync_ts = 0.0
+        # Restore from persisted device-reported state (if available)
+        # This lets HA show the correct state immediately after reboot
+        # WITHOUT sending any commands to the device
+        if saved_state and isinstance(saved_state, dict):
+            sp = saved_state.get("payload", {})
+            if sp:
+                _LOGGER.info("ET-Bus light %s: restoring from persisted state: %s", dev_id, sp)
+                self._apply_payload(sp)
+
+        # Use device effects if provided, otherwise use defaults
+        self._effect_list = list(effects or DEFAULT_EFFECTS)
 
         self._attr_unique_id = f"etbus_{dev_id}_rgb"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, dev_id)},
             "name": dev_id,
             "manufacturer": "ElectronicsTech",
+            "model": "ET-Bus RGB LED",
         }
 
     # -------------------
@@ -134,9 +185,10 @@ class EtBusRgbLight(LightEntity):
         }
 
     # -------------------
-    # Incoming state
+    # Incoming state from device (device is source of truth)
     # -------------------
-    def handle_state(self, payload: dict[str, Any]) -> None:
+    def _apply_payload(self, payload: dict[str, Any]) -> None:
+        """Apply state from a device payload without writing HA state."""
         if "on" in payload:
             self._is_on = bool(payload["on"])
 
@@ -153,16 +205,25 @@ class EtBusRgbLight(LightEntity):
         if "effect" in payload:
             eff = str(payload["effect"])
             self._effect = eff
-            if eff not in self._effect_list:
-                self._effect_list.append(eff)
 
         if "speed" in payload:
             self._speed = int(payload["speed"])
 
+    def handle_state(self, payload: dict[str, Any]) -> None:
+        """Update entity from device-reported state."""
+        self._apply_payload(payload)
+
+        # Dynamically add new effects if device reports them
+        if "effect" in payload:
+            eff = str(payload["effect"])
+            if eff not in self._effect_list:
+                self._effect_list.append(eff)
+                _LOGGER.info("ET-Bus light %s: learned new effect '%s'", self._dev_id, eff)
+
         self.async_write_ha_state()
 
     # -------------------
-    # HA → device
+    # HA → device (only when user explicitly acts)
     # -------------------
     async def async_turn_on(self, **kwargs):
         self._is_on = True
@@ -187,13 +248,6 @@ class EtBusRgbLight(LightEntity):
         self._send_command()
         self.async_write_ha_state()
 
-    def maybe_resync_to_device(self, reason: str):
-        now = time.time()
-        if (now - self._last_resync_ts) < _RESYNC_COOLDOWN_S:
-            return
-        self._last_resync_ts = now
-        self._send_command()
-
     # -------------------
     # Send ET-Bus command
     # -------------------
@@ -206,5 +260,8 @@ class EtBusRgbLight(LightEntity):
             "brightness": int(self._brightness),
             "effect": self._effect,
             "speed": int(self._speed),
+        }
+        self._hub.send_command(self._dev_id, "light.rgb", payload)
+        _LOGGER.debug("ET-Bus light %s: sent command %s", self._dev_id, payload)
         }
         self._hub.send_command(self._dev_id, "light.rgb", payload)
