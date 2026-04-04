@@ -1,376 +1,518 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import socket
 import time
 from typing import Any, Callable
 
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 
-from .const import MULTICAST_GROUP, MULTICAST_PORT, PING_INTERVAL, OFFLINE_TIMEOUT
+from .const import (
+    CONF_CRYPTO_ENABLED,
+    CONF_PORT,
+    CONF_PSK_HEX,
+    DEFAULT_HOST_MCAST,
+    DEFAULT_PORT,
+    ETBUS_KID,
+    OFFLINE_TIMEOUT,
+    PING_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
+STORAGE_KEY = "etbus_last_commands"
+STORAGE_VERSION = 1
+STORAGE_KEY_DEVICE_STATE = "etbus_device_states"
+
 try:
-    import psutil
+    from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 except Exception:  # pragma: no cover
-    psutil = None
+    ChaCha20Poly1305 = None
 
 
-def _list_ipv4_addrs() -> list[str]:
-    """Return a best-effort list of local IPv4 addresses (excluding 127.0.0.1)."""
-    if psutil is None:
-        return []
+def _now() -> float:
+    return time.time()
 
-    out: list[str] = []
+
+def _hex32_to_bytes(psk_hex: str) -> bytes | None:
+    if not psk_hex:
+        return None
+    s = "".join(ch for ch in psk_hex.strip().lower() if ch in "0123456789abcdef")
+    if len(s) != 64:
+        return None
     try:
-        for _, infos in psutil.net_if_addrs().items():
-            for info in infos:
-                if info.family == socket.AF_INET:
-                    ip = info.address
-                    if ip and ip != "127.0.0.1":
-                        out.append(ip)
+        return bytes.fromhex(s)
     except Exception:
-        return []
+        return None
 
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for ip in out:
-        if ip not in seen:
-            seen.add(ip)
-            deduped.append(ip)
-    return deduped
+
+def _b64e(b: bytes) -> str:
+    return base64.b64encode(b).decode("ascii")
+
+
+def _b64d(s: str) -> bytes:
+    return base64.b64decode(s.encode("ascii"))
+
+
+def _u64_le(n: int) -> bytes:
+    return int(n).to_bytes(8, "little", signed=False)
 
 
 class EtBusHub:
-    """ET-Bus UDP hub.
+    """ET-Bus hub (NO MAC mode): key = sha256(PSK || device_id), AAD=None"""
 
-    Design:
-      - Multicast is used for discovery/ping only.
-      - Commands are unicast once device IP is known.
-      - Devices should unicast heartbeat/state to the hub once they learn hub IP.
-    """
-
-    def __init__(self, hass: HomeAssistant):
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._sock: socket.socket | None = None
+        self.entry = entry
 
-        # dev_id -> info
-        self._devices: dict[str, dict[str, Any]] = {}
+        opts = dict(entry.options)
+        self.port: int = int(opts.get(CONF_PORT, DEFAULT_PORT))
+        self.crypto_enabled: bool = bool(opts.get(CONF_CRYPTO_ENABLED, False))
+        self.psk_hex: str = str(opts.get(CONF_PSK_HEX, "") or "")
+        self.master_secret: bytes | None = _hex32_to_bytes(self.psk_hex)
 
-        # message listeners (platforms)
+        if self.crypto_enabled and (ChaCha20Poly1305 is None):
+            _LOGGER.error("ET-Bus crypto enabled but cryptography is missing")
+            self.crypto_enabled = False
+
+        if self.crypto_enabled and not self.master_secret:
+            _LOGGER.error("ET-Bus crypto enabled but psk_hex is invalid (needs 64 hex chars)")
+            self.crypto_enabled = False
+
+        self.hub_id: str = "hub"
+
+        self.devices: dict[str, dict[str, Any]] = {}
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
 
-        self._tasks: list[asyncio.Task] = []
+        self._sock: socket.socket | None = None
+        self._task: asyncio.Task | None = None
+        self._ping_task: asyncio.Task | None = None
 
-        self._rx_count = 0
-        self._last_rx_any = 0.0
-        self._last_rx_log = 0.0
+        # last command per device — persisted to disk for reference
+        self._last_command: dict[str, dict[str, Any]] = {}
+        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
 
-        # prevent status spam
-        self._last_status_fire: dict[str, float] = {}
+        # last REPORTED state from each device — persisted so HA entities
+        # can restore their state on HA reboot WITHOUT sending commands
+        self._last_reported_state: dict[str, dict[str, Any]] = {}
+        self._state_store = Store(hass, STORAGE_VERSION, STORAGE_KEY_DEVICE_STATE)
 
-    @property
-    def devices(self) -> dict[str, dict[str, Any]]:
-        # return a copy so platforms don’t mutate it accidentally
-        return dict(self._devices)
+        # per-device tx ctr for commands
+        self._tx_ctr: dict[str, int] = {}
+        # anti-replay for incoming encrypted STATE
+        self._rx_state_last_ctr: dict[str, int] = {}
+
+        self._hub_start_time = int(time.time())
+
+        _LOGGER.info("ET-Bus hub init port=%s crypto=%s startup_time=%s",
+                     self.port, self.crypto_enabled, self._hub_start_time)
 
     def register_listener(self, cb: Callable[[dict[str, Any]], None]) -> None:
         self._listeners.append(cb)
 
-    def device_ready(self, dev_id: str) -> bool:
-        info = self._devices.get(dev_id) or {}
-        return bool(info.get("online", False)) and bool(info.get("last_addr"))
-
-    # ---------------------------------------------------------------------
-    # Socket (build / rebuild)
-    # ---------------------------------------------------------------------
-    def _build_socket(self) -> socket.socket:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        except Exception:
-            pass
-
-        # Listen on all interfaces
-        sock.bind(("", MULTICAST_PORT))
-
-        # Join multicast group on 0.0.0.0 and all discovered IPv4 interfaces.
-        joined = 0
-        ips = _list_ipv4_addrs()
-
-        def _join(if_ip: str) -> None:
-            nonlocal joined
-            try:
-                mreq = socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton(if_ip)
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-                joined += 1
-            except OSError as e:
-                # 98 = Address already in use (can happen on reload)
-                if getattr(e, "errno", None) == 98:
-                    return
-                _LOGGER.warning("ET-Bus multicast join (%s) failed: %s", if_ip, e)
-            except Exception as e:
-                _LOGGER.warning("ET-Bus multicast join (%s) failed: %s", if_ip, e)
-
-        _join("0.0.0.0")
-        for ip in ips:
-            _join(ip)
-
-        # Don't loop our own multicast back if the OS supports it
-        try:
-            sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 0)
-        except Exception:
-            pass
-
-        sock.setblocking(True)
-
-        _LOGGER.info(
-            "ET-Bus hub listening UDP *:%s (mcast %s) joins=%d ifaces=%s",
-            MULTICAST_PORT,
-            MULTICAST_GROUP,
-            joined,
-            ips,
-        )
-        return sock
-
     async def async_start(self) -> None:
-        loop = asyncio.get_running_loop()
-        self._sock = self._build_socket()
-        self._last_rx_any = time.time()
+        # Load persisted data from disk before anything else
+        await self._load_last_commands()
+        await self._load_device_states()
 
-        self._tasks.append(self.hass.loop.create_task(self._receiver(loop)))
-        self._tasks.append(self.hass.loop.create_task(self._pinger()))
-        self._tasks.append(self.hass.loop.create_task(self._rx_watchdog()))
+        self._open_socket()
+        self._task = asyncio.create_task(self._rx_loop())
+        self._ping_task = asyncio.create_task(self._ping_loop())
+        self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self._on_stop)
+
+        # Send startup ping (devices will re-announce)
+        await asyncio.sleep(2)
+        self._send_startup_ping()
+
+    async def _on_stop(self, _ev) -> None:
+        # Persist before shutting down
+        await self._save_last_commands()
+        await self._save_device_states()
+        await self.async_stop()
 
     async def async_stop(self) -> None:
-        for task in self._tasks:
-            task.cancel()
-        self._tasks.clear()
-
+        for t in (self._ping_task, self._task):
+            if t:
+                t.cancel()
+        self._ping_task = None
+        self._task = None
         if self._sock:
             try:
                 self._sock.close()
             except Exception:
                 pass
-            self._sock = None
+        self._sock = None
 
-    # ---------------------------------------------------------------------
-    # Send helpers
-    # ---------------------------------------------------------------------
-    def send(self, message: dict[str, Any]) -> None:
-        """Send to multicast (discovery plane)."""
-        self._sendto(message, MULTICAST_GROUP)
+    # ── Persistent storage ───────────────────────────────────────────────
 
-    def send_unicast(self, target_ip: str, message: dict[str, Any]) -> None:
-        self._sendto(message, target_ip)
-
-    def send_command(self, dev_id: str, dev_class: str, payload: dict[str, Any]) -> None:
-        """Send a command, unicast if device IP known."""
-        msg = {"v": 1, "type": "command", "id": dev_id, "class": dev_class, "payload": payload}
-        info = self._devices.get(dev_id) or {}
-        ip = info.get("last_addr")
-        if ip:
-            self._sendto(msg, ip)
-        else:
-            # Fallback: multicast (only works if Wi-Fi multicast is behaving)
-            self._sendto(msg, MULTICAST_GROUP)
-
-    def _sendto(self, message: dict[str, Any], dst_ip: str) -> None:
-        if not self._sock:
-            return
+    async def _load_last_commands(self) -> None:
+        """Load persisted last-command map from disk."""
         try:
-            data = json.dumps(message, separators=(",", ":")).encode("utf-8")
-            self._sock.sendto(data, (dst_ip, MULTICAST_PORT))
-        except Exception as e:
-            _LOGGER.error("ET-Bus send error (%s): %s", dst_ip, e)
+            data = await self._store.async_load()
+            if isinstance(data, dict):
+                self._last_command = data
+                _LOGGER.info("✅ ETBUS: Loaded %d persisted device commands", len(data))
+            else:
+                self._last_command = {}
+        except Exception:
+            _LOGGER.exception("ET-Bus: failed to load persisted commands")
+            self._last_command = {}
 
-    # ---------------------------------------------------------------------
-    # Receiver
-    # ---------------------------------------------------------------------
-    async def _receiver(self, loop) -> None:
-        if not self._sock:
+    async def _save_last_commands(self) -> None:
+        """Persist the last-command map to disk."""
+        try:
+            await self._store.async_save(self._last_command)
+        except Exception:
+            _LOGGER.exception("ET-Bus: failed to persist commands")
+
+    def _schedule_save(self) -> None:
+        """Fire-and-forget save (non-blocking from sync context)."""
+        asyncio.ensure_future(self._save_last_commands())
+
+    async def _load_device_states(self) -> None:
+        """Load persisted device-reported states from disk."""
+        try:
+            data = await self._state_store.async_load()
+            if isinstance(data, dict):
+                self._last_reported_state = data
+                _LOGGER.info("✅ ETBUS: Loaded %d persisted device states", len(data))
+            else:
+                self._last_reported_state = {}
+        except Exception:
+            _LOGGER.exception("ET-Bus: failed to load persisted device states")
+            self._last_reported_state = {}
+
+    async def _save_device_states(self) -> None:
+        """Persist the last-reported-state map to disk."""
+        try:
+            await self._state_store.async_save(self._last_reported_state)
+        except Exception:
+            _LOGGER.exception("ET-Bus: failed to persist device states")
+
+    def _schedule_save_states(self) -> None:
+        """Fire-and-forget save of device states."""
+        asyncio.ensure_future(self._save_device_states())
+
+    def get_last_reported_state(self, dev_id: str) -> dict[str, Any] | None:
+        """Get the last reported state for a device (for entity restoration)."""
+        return self._last_reported_state.get(dev_id)
+
+    # ── Socket ───────────────────────────────────────────────────────────
+
+    def _open_socket(self) -> None:
+        if self._sock:
             return
+
+        mcast_ip = DEFAULT_HOST_MCAST
+        port = int(self.port)
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        try:
+            sock.bind(("", port))
+        except Exception:
+            sock.bind(("0.0.0.0", port))
+
+        mreq = socket.inet_aton(mcast_ip) + socket.inet_aton("0.0.0.0")
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+        sock.setblocking(False)
+        self._sock = sock
+        _LOGGER.info("ET-Bus UDP bound %s:%s", mcast_ip, port)
+
+    def _derive_key_for_dev(self, dev_id: str) -> bytes | None:
+        if not self.crypto_enabled or not self.master_secret:
+            return None
+        return hashlib.sha256(self.master_secret + dev_id.encode("utf-8")).digest()
+
+    def _nonce_cmd(self, ctr: int) -> bytes:
+        return b"\x00\x00\x00\x00" + _u64_le(ctr)
+
+    # ── RX loop ──────────────────────────────────────────────────────────
+
+    async def _rx_loop(self) -> None:
+        assert self._sock is not None
+        loop = asyncio.get_running_loop()
 
         while True:
             try:
-                data, addr = await loop.run_in_executor(None, self._sock.recvfrom, 8192)
+                data, (src_ip, _src_port) = await loop.sock_recvfrom(self._sock, 8192)
             except asyncio.CancelledError:
                 return
-            except OSError as e:
-                _LOGGER.error("ET-Bus recv error: %s", e)
-                await asyncio.sleep(1)
+            except Exception:
+                await asyncio.sleep(0.05)
                 continue
 
-            self._last_rx_any = time.time()
-            self._rx_count += 1
+            rx_ts = _now()
 
             try:
-                msg = json.loads(data.decode("utf-8"))
+                msg = json.loads(data.decode("utf-8", errors="strict"))
             except Exception:
                 continue
 
-            now = time.time()
-            if now - self._last_rx_log > 10:
-                self._last_rx_log = now
-                _LOGGER.debug("ET-Bus RX ok: count=%d last_from=%s:%s", self._rx_count, addr[0], addr[1])
+            v = int(msg.get("v", 0) or 0)
+            mtype = str(msg.get("type", "") or "")
+            dev_id = str(msg.get("id", "") or "")
+            payload = msg.get("payload") or {}
 
-            self._update_registry(msg, addr)
+            if v != 1 or not mtype or not dev_id:
+                continue
 
-            # For dashboard/panel/logging tools
-            try:
-                msg_with_meta = dict(msg)
-                msg_with_meta["_src_ip"] = addr[0]
-                msg_with_meta["_rx_ts"] = time.time()
-                self.hass.bus.async_fire("etbus_message", msg_with_meta)
-            except Exception:
-                pass
+            if dev_id != self.hub_id:
+                self._touch_device(dev_id, src_ip, mtype)
+
+            was_encrypted = (self.crypto_enabled and isinstance(payload, dict) and payload.get("_enc") == 1)
+
+            # Decrypt incoming encrypted STATE (device -> hub)
+            if was_encrypted:
+                plain = self._decrypt_wrapper_state(dev_id=dev_id, wrapper=payload, src_ip=src_ip)
+                if plain is None:
+                    continue
+                msg["payload"] = plain
+
+            # Web panel event
+            self.hass.bus.async_fire("etbus_message", {
+                "id": dev_id,
+                "type": mtype,
+                "class": msg.get("class", ""),
+                "payload": msg.get("payload", {}),
+                "_src_ip": src_ip,
+                "_rx_ts": rx_ts,
+                "_encrypted": was_encrypted,
+            })
+
+            # Persist device-reported state so HA entities can restore
+            # their state on HA reboot without sending commands.
+            # IMPORTANT: skip discovery-format payloads where "switches"
+            # is a list of dicts (e.g. [{"id":"1","name":"Relay 1"},...]).
+            # Only persist real state where "switches" is a dict
+            # (e.g. {"1": true, "2": false}).
+            if mtype == "state" and dev_id != self.hub_id:
+                reported = msg.get("payload")
+                if isinstance(reported, dict) and reported:
+                    # Filter: if "switches" exists and is a list, this is
+                    # a discovery payload sent via sendState — don't persist
+                    sw = reported.get("switches")
+                    if isinstance(sw, list):
+                        _LOGGER.debug(
+                            "ET-Bus: skipping discovery-format state persistence for %s",
+                            dev_id,
+                        )
+                    else:
+                        self._last_reported_state[dev_id] = {
+                            "dev_class": str(msg.get("class", "")),
+                            "payload": reported,
+                            "ts": rx_ts,
+                        }
+                        self._schedule_save_states()
 
             for cb in list(self._listeners):
-                self.hass.add_job(cb, msg)
+                try:
+                    cb(msg)
+                except Exception:
+                    _LOGGER.exception("ET-Bus listener error")
 
-    # ---------------------------------------------------------------------
-    # RX watchdog:
-    # If absolutely nothing arrives, rebuild multicast socket.
-    # With devices unicasting to HA after learning hub IP, this should be rare.
-    # IMPORTANT: align with OFFLINE_TIMEOUT (don’t rebuild too aggressively)
-    # ---------------------------------------------------------------------
-    async def _rx_watchdog(self) -> None:
-        while True:
-            try:
-                await asyncio.sleep(5)
-            except asyncio.CancelledError:
-                return
-
-            # If no RX at all for 90s, recreate socket + rejoin groups.
-            # (Was 60s before; too aggressive when pong=30s)
-            if (time.time() - self._last_rx_any) < 90:
-                continue
-
-            _LOGGER.warning("ET-Bus RX stalled >90s, rebuilding multicast socket...")
-
-            try:
-                if self._sock:
-                    self._sock.close()
-            except Exception:
-                pass
-
-            self._sock = self._build_socket()
-            self._last_rx_any = time.time()
-
-    # ---------------------------------------------------------------------
-    # Online/offline tracking + hub ping
-    # ---------------------------------------------------------------------
-    def _fire_device_status(self, dev_id: str, reason: str) -> None:
-        now = time.time()
-        last = float(self._last_status_fire.get(dev_id, 0.0))
-        if (now - last) < 0.75:
-            return
-        self._last_status_fire[dev_id] = now
-
-        info = self._devices.get(dev_id) or {}
-        try:
-            self.hass.bus.async_fire(
-                "etbus_device_status",
-                {
+            if dev_id != self.hub_id:
+                self.hass.bus.async_fire("etbus_device_status", {
                     "id": dev_id,
-                    "online": bool(info.get("online", False)),
-                    "last_seen": float(info.get("last_seen", 0.0)),
-                    "last_addr": info.get("last_addr"),
-                    "reason": reason,
-                },
-            )
+                    "online": True,
+                    "reason": mtype,
+                    "ip": src_ip
+                })
+
+    def _touch_device(self, dev_id: str, ip: str, mtype: str = "") -> None:
+        d = self.devices.setdefault(dev_id, {})
+        d["ip"] = ip
+        d["last_seen"] = _now()
+        d["online"] = True
+
+        # NOTE: We do NOT resend commands on HA reboot.
+        # The device has its own NVS persistence and will report
+        # its current state via pong/discover/state messages.
+        # HA entities will update from those state reports.
+
+    def _decrypt_wrapper_state(
+        self, *, dev_id: str, wrapper: dict[str, Any], src_ip: str
+    ) -> dict[str, Any] | None:
+        if not self.crypto_enabled or not self.master_secret or ChaCha20Poly1305 is None:
+            return None
+
+        expected_ip = (self.devices.get(dev_id) or {}).get("ip")
+        if expected_ip and expected_ip != src_ip:
+            _LOGGER.warning("ETBUS DROP rx_state dev=%s from ip=%s (expected %s)", dev_id, src_ip, expected_ip)
+            return None
+
+        kid = int(wrapper.get("kid") or 0)
+        ctr = int(wrapper.get("ctr") or 0)
+
+        if kid != int(ETBUS_KID) or ctr < 0:
+            return None
+
+        last = int(self._rx_state_last_ctr.get(dev_id, 0))
+
+        # Device reboot detection (ctr reset)
+        if ctr <= last:
+            drop = last - ctr
+            # Accept reset only for very low ctr, or huge drop
+            if ctr in (0, 1) or ctr < 30 or drop >= 50:
+                _LOGGER.warning("✅ ETBUS DEVICE REBOOT: dev=%s ctr=%s last=%s drop=%s", dev_id, ctr, last, drop)
+                # Device has NVS persistence — it restores its own state.
+                # We just accept the counter reset and let the state report through.
+            else:
+                _LOGGER.warning("❌ ETBUS REPLAY: dev=%s ctr=%s last=%s drop=%s", dev_id, ctr, last, drop)
+                return None
+
+        nonce_b64 = wrapper.get("nonce")
+        ct_b64 = wrapper.get("ct")
+        tag_b64 = wrapper.get("tag")
+        if not (nonce_b64 and ct_b64 and tag_b64):
+            return None
+
+        try:
+            nonce = _b64d(str(nonce_b64))
+            ct = _b64d(str(ct_b64))
+            tag = _b64d(str(tag_b64))
+        except Exception:
+            return None
+
+        if len(nonce) != 12 or len(tag) != 16 or len(ct) == 0:
+            return None
+
+        key = self._derive_key_for_dev(dev_id)
+        if not key:
+            return None
+
+        try:
+            aead = ChaCha20Poly1305(key)
+            pt = aead.decrypt(nonce, ct + tag, None)
+            plain = json.loads(pt.decode("utf-8", errors="strict"))
+            if isinstance(plain, dict):
+                self._rx_state_last_ctr[dev_id] = ctr
+                return plain
+        except Exception as e:
+            _LOGGER.error("❌ ETBUS DEC FAIL rx_state dev=%s ctr=%s err=%r", dev_id, ctr, e)
+            return None
+
+        return None
+
+    def send_command(self, dev_id: str, dev_class: str, payload: dict[str, Any], *, store_last: bool = True) -> None:
+        info = self.devices.get(dev_id) or {}
+        ip = info.get("ip")
+        if not ip:
+            _LOGGER.warning("ET-Bus: no IP for %s", dev_id)
+            return
+
+        if store_last:
+            self._last_command[dev_id] = {
+                "dev_class": dev_class,
+                "payload": payload.copy() if payload else {}
+            }
+            # Persist to disk so we survive HA restarts
+            self._schedule_save()
+
+        msg: dict[str, Any] = {
+            "v": 1,
+            "type": "command",
+            "id": self.hub_id,
+            "class": dev_class,
+            "payload": payload or {},
+        }
+
+        if self.crypto_enabled:
+            wrapper = self._encrypt_command(dev_id=dev_id, plain=payload or {})
+            if wrapper is None:
+                return
+            msg["payload"] = wrapper
+
+        self._udp_send(ip, self.port, msg)
+
+    def _encrypt_command(self, *, dev_id: str, plain: dict[str, Any]) -> dict[str, Any] | None:
+        if not self.crypto_enabled or not self.master_secret or ChaCha20Poly1305 is None:
+            return None
+
+        key = self._derive_key_for_dev(dev_id)
+        if not key:
+            return None
+
+        ctr = int(self._tx_ctr.get(dev_id, 0) + 1)
+        self._tx_ctr[dev_id] = ctr
+
+        nonce = self._nonce_cmd(ctr)
+        pt = json.dumps(plain, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+        try:
+            aead = ChaCha20Poly1305(key)
+            out = aead.encrypt(nonce, pt, None)
+            ct, tag = out[:-16], out[-16:]
+        except Exception as e:
+            _LOGGER.warning("ETBUS ENC FAIL dev=%s ctr=%s err=%r", dev_id, ctr, e)
+            return None
+
+        return {
+            "_enc": 1,
+            "kid": int(ETBUS_KID),
+            "ctr": int(ctr),
+            "nonce": _b64e(nonce),
+            "ct": _b64e(ct),
+            "tag": _b64e(tag),
+        }
+
+    async def _ping_loop(self) -> None:
+        while True:
+            await asyncio.sleep(float(PING_INTERVAL))
+
+            now = _now()
+            for dev_id, info in list(self.devices.items()):
+                last = float(info.get("last_seen", 0.0) or 0.0)
+                online = bool(info.get("online", True))
+                if online and last and (now - last) > float(OFFLINE_TIMEOUT):
+                    info["online"] = False
+                    self.hass.bus.async_fire("etbus_device_status", {
+                        "id": dev_id,
+                        "online": False,
+                        "reason": "offline"
+                    })
+
+            self._send_ping_multicast()
+
+    def _send_startup_ping(self) -> None:
+        msg = {
+            "v": 1,
+            "type": "ping",
+            "id": self.hub_id,
+            "class": "hub",
+            "payload": {
+                "port": int(self.port),
+                "ts": self._hub_start_time,
+                "startup": True,
+            },
+        }
+        self._udp_send(DEFAULT_HOST_MCAST, int(self.port), msg, multicast=True)
+        _LOGGER.info("✅ ETBUS: Sent startup ping (ts=%s)", self._hub_start_time)
+
+    def _send_ping_multicast(self) -> None:
+        msg = {
+            "v": 1,
+            "type": "ping",
+            "id": self.hub_id,
+            "class": "hub",
+            "payload": {"port": int(self.port), "ts": int(time.time())},
+        }
+        self._udp_send(DEFAULT_HOST_MCAST, int(self.port), msg, multicast=True)
+
+    def _udp_send(self, ip: str, port: int, msg: dict[str, Any], multicast: bool = False) -> None:
+        if not self._sock:
+            return
+        data = json.dumps(msg, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        try:
+            self._sock.sendto(data, (ip, port))
         except Exception:
             pass
-
-    async def _pinger(self) -> None:
-        while True:
-            try:
-                await asyncio.sleep(PING_INTERVAL)
-            except asyncio.CancelledError:
-                return
-
-            # Multicast ping helps devices learn hub IP if they listen for it.
-            self.send({"v": 1, "type": "ping", "id": "hub", "class": "hub", "payload": {"ts": int(time.time())}})
-
-            now = time.time()
-            for dev_id, info in list(self._devices.items()):
-                last_seen = float(info.get("last_seen", 0))
-                was_online = bool(info.get("online", False))
-                is_online = (now - last_seen) < OFFLINE_TIMEOUT
-
-                if is_online != was_online:
-                    info["online"] = is_online
-                    state = "online" if is_online else "offline"
-                    _LOGGER.warning("ET-Bus device %s is now %s", dev_id, state)
-                    self._fire_device_status(dev_id, reason=state)
-
-    # ---------------------------------------------------------------------
-    # Registry updates (device IP learning happens here)
-    # ---------------------------------------------------------------------
-    def _update_registry(self, msg: dict[str, Any], addr) -> None:
-        if msg.get("v") != 1:
-            return
-
-        dev_id = msg.get("id")
-        if not dev_id or dev_id == "hub":
-            return
-
-        dev_class = msg.get("class")
-        mtype = msg.get("type")
-        payload = msg.get("payload", {}) or {}
-
-        now = time.time()
-        dev = self._devices.get(dev_id)
-
-        is_new = False
-        came_online = False
-
-        if not dev:
-            is_new = True
-            dev = {
-                "id": dev_id,
-                "class": dev_class,
-                "name": payload.get("name", dev_id),
-                "fw": payload.get("fw"),
-                "last_addr": addr[0],
-                "last_seen": now,
-                "online": True,
-            }
-            self._devices[dev_id] = dev
-            _LOGGER.info("ET-Bus new device: %s (%s) from %s", dev_id, dev_class, addr[0])
-        else:
-            prev_online = bool(dev.get("online", True))
-            if dev_class:
-                dev["class"] = dev_class
-            if "name" in payload:
-                dev["name"] = payload.get("name", dev.get("name", dev_id))
-            if "fw" in payload:
-                dev["fw"] = payload.get("fw")
-
-            dev["last_addr"] = addr[0]
-            dev["last_seen"] = now
-
-            if not prev_online:
-                dev["online"] = True
-                came_online = True
-
-        # Store common health fields when present
-        if mtype == "pong" and isinstance(payload, dict):
-            if "uptime" in payload:
-                dev["uptime"] = payload["uptime"]
-            if "rssi" in payload:
-                dev["rssi"] = payload["rssi"]
-
-        # ✅ IMPORTANT FIX:
-        # Only fire device_status on REAL transitions/new devices.
-        # DO NOT fire status events on every pong/discover (that creates spam/thrashing)
-        if is_new:
-            self._fire_device_status(dev_id, reason="new")
-        elif came_online:
-            self._fire_device_status(dev_id, reason="online")
-        # (offline handled in _pinger via OFFLINE_TIMEOUT)
