@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 import logging
 from typing import Any
 
@@ -13,7 +12,6 @@ from .const import DOMAIN
 from .hub import EtBusHub
 
 _LOGGER = logging.getLogger(__name__)
-_RESYNC_COOLDOWN_S = 6.0
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -39,38 +37,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         if mtype in ("discover", "state", "pong"):
             if key not in entities:
                 name = payload.get("name", dev_id)
-                ent = EtBusFan(hub, dev_id, dev_class, endpoint, name)
+
+                # Restore last known state from hub's persisted device states
+                saved = hub.get_last_reported_state(dev_id)
+                ent = EtBusFan(hub, dev_id, dev_class, endpoint, name, saved)
                 entities[key] = ent
                 async_add_entities([ent])
                 _LOGGER.info("ET-Bus: discovered %s %s", dev_class, dev_id)
 
+            # Always update HA entity from device-reported state
             if mtype == "state":
                 entities[key].handle_state(payload)
 
-    @callback
-    def handle_status_event(ev) -> None:
-        data = ev.data or {}
-        dev_id = data.get("id")
-        reason = data.get("reason", "")
-        if not dev_id:
-            return
-
-        for (did, _), ent in list(entities.items()):
-            if did != dev_id:
-                continue
-            ent.async_write_ha_state()
-            if reason in ("discover", "pong", "online", "new"):
-                ent.maybe_resync_to_device(reason=reason)
-
     hub.register_listener(handle_message)
-    hass.bus.async_listen("etbus_device_status", handle_status_event)
 
 
 class EtBusFan(FanEntity):
     _attr_should_poll = False
     _attr_entity_registry_enabled_default = True
 
-    def __init__(self, hub: EtBusHub, dev_id: str, dev_class: str, endpoint: str, name: str):
+    def __init__(
+        self,
+        hub: EtBusHub,
+        dev_id: str,
+        dev_class: str,
+        endpoint: str,
+        name: str,
+        saved_state: dict[str, Any] | None = None,
+    ):
         self._hub = hub
         self._dev_id = dev_id
         self._dev_class = dev_class
@@ -80,7 +74,15 @@ class EtBusFan(FanEntity):
         self._is_on = False
         self._percentage = 0
         self._preset: str | None = None
-        self._last_resync_ts = 0.0
+
+        # Restore from persisted device-reported state (if available)
+        # This lets HA show the correct state immediately after reboot
+        # WITHOUT sending any commands to the device
+        if saved_state and isinstance(saved_state, dict):
+            sp = saved_state.get("payload", {})
+            if sp:
+                _LOGGER.info("ET-Bus fan %s: restoring from persisted state: %s", dev_id, sp)
+                self._apply_payload(sp)
 
         self._attr_unique_id = f"etbus_{dev_id}_{endpoint}"
         self._attr_device_info = {
@@ -119,7 +121,11 @@ class EtBusFan(FanEntity):
             return None
         return self._preset
 
-    def handle_state(self, payload: dict[str, Any]) -> None:
+    # -------------------
+    # Incoming state from device (device is source of truth)
+    # -------------------
+    def _apply_payload(self, payload: dict[str, Any]) -> None:
+        """Apply state from a device payload without writing HA state."""
         if "on" in payload:
             self._is_on = bool(payload["on"])
 
@@ -129,41 +135,16 @@ class EtBusFan(FanEntity):
         if self._dev_class == "fan.preset" and "preset" in payload:
             self._preset = str(payload["preset"])
 
+    def handle_state(self, payload: dict[str, Any]) -> None:
+        """Update entity from device-reported state."""
+        self._apply_payload(payload)
+
         if self.hass is not None:
             self.async_write_ha_state()
 
-    def maybe_resync_to_device(self, reason: str) -> None:
-        if self.hass is None or not self.available:
-            return
-
-        now = time.time()
-        if (now - self._last_resync_ts) < _RESYNC_COOLDOWN_S:
-            return
-
-        ha_state = self.hass.states.get(self.entity_id)
-        if ha_state is None:
-            return
-
-        desired_on = (ha_state.state == "on")
-
-        if self._dev_class == "fan.speed":
-            desired_pct = ha_state.attributes.get("percentage")
-            if desired_pct is None:
-                desired_pct = self._percentage
-            self._percentage = int(desired_pct)
-            self._is_on = bool(desired_on) and self._percentage > 0
-        else:
-            desired_preset = ha_state.attributes.get("preset_mode")
-            if not desired_preset:
-                desired_preset = "high" if desired_on else "off"
-            self._preset = str(desired_preset)
-            self._is_on = (self._preset != "off")
-
-        self._last_resync_ts = now
-        _LOGGER.warning("ET-Bus resync fan %s after %s", self.entity_id, reason)
-        self._send_command()
-        self.async_write_ha_state()
-
+    # -------------------
+    # HA → device (only when user explicitly acts)
+    # -------------------
     async def async_set_percentage(self, percentage: int) -> None:
         self._percentage = int(percentage)
         self._is_on = self._percentage > 0
