@@ -21,6 +21,50 @@ _LOGGER = logging.getLogger(__name__)
 
 _ENTITIES: dict[str, "EtBusValueSensor"] = {}
 
+_SKIP_PAYLOAD_KEYS = {
+    "unit",
+    "units",
+    "name",
+    "fw",
+    "model",
+    "version",
+    "lib",
+    "boot",
+    "features",
+}
+
+_SENSOR_META = {
+    "temp": ("Temperature", UnitOfTemperature.CELSIUS, "temperature"),
+    "temperature": ("Temperature", UnitOfTemperature.CELSIUS, "temperature"),
+    "humidity": ("Humidity", PERCENTAGE, "humidity"),
+    "rh": ("Humidity", PERCENTAGE, "humidity"),
+    "co2": ("CO2", CONCENTRATION_PARTS_PER_MILLION, "carbon_dioxide"),
+    "eco2": ("eCO2", CONCENTRATION_PARTS_PER_MILLION, "carbon_dioxide"),
+    "pressure": ("Pressure", "hPa", "pressure"),
+    "baro": ("Pressure", "hPa", "pressure"),
+    "tvoc": ("TVOC", "ppb", "volatile_organic_compounds_parts"),
+    "voc": ("VOC", "ppb", "volatile_organic_compounds_parts"),
+    "pm1": ("PM1", "µg/m³", "pm1"),
+    "pm1_0": ("PM1", "µg/m³", "pm1"),
+    "pm2_5": ("PM2.5", "µg/m³", "pm25"),
+    "pm25": ("PM2.5", "µg/m³", "pm25"),
+    "pm10": ("PM10", "µg/m³", "pm10"),
+    "lux": ("Illuminance", "lx", "illuminance"),
+    "light": ("Illuminance", "lx", "illuminance"),
+    "battery": ("Battery", PERCENTAGE, "battery"),
+    "voltage": ("Voltage", "V", "voltage"),
+    "current": ("Current", "A", "current"),
+    "power": ("Power", "W", "power"),
+    "energy": ("Energy", "kWh", "energy"),
+    "rssi": ("RSSI", "dBm", "signal_strength"),
+    "noise": ("Noise", "dB", "sound_pressure"),
+    "sound": ("Sound", "dB", "sound_pressure"),
+    "gas": ("Gas", "kΩ", None),
+    "gas_resistance": ("Gas Resistance", "kΩ", None),
+    "no2": ("NO2", CONCENTRATION_PARTS_PER_MILLION, "nitrogen_dioxide"),
+    "co": ("CO", CONCENTRATION_PARTS_PER_MILLION, "carbon_monoxide"),
+}
+
 
 def _endpoint_from_class(cls: str) -> str:
     return cls.replace(".", "_")
@@ -95,7 +139,7 @@ def _process_state(async_add_entities: AddEntitiesCallback, hub: EtBusHub, m: _M
 
     # multi-metric payload style
     for metric, value in m.payload.items():
-        if metric in ("unit", "name", "fw"):
+        if str(metric).lower() in _SKIP_PAYLOAD_KEYS:
             continue
         if value is None or isinstance(value, (dict, list)):
             continue
@@ -138,12 +182,8 @@ class EtBusValueSensor(SensorEntity):
 
         self._attr_unique_id = f"etbus_{dev_id}_{endpoint}_{metric}"
 
-        pretty = {
-            "temp": "Temperature",
-            "temperature": "Temperature",
-            "humidity": "Humidity",
-            "co2": "CO2",
-        }.get(metric.lower(), metric)
+        meta = _SENSOR_META.get(metric.lower())
+        pretty = meta[0] if meta else metric
         self._attr_name = pretty
 
         self._attr_device_info = {
@@ -153,12 +193,14 @@ class EtBusValueSensor(SensorEntity):
         }
 
         mlow = metric.lower()
-        if mlow in ("temp", "temperature"):
-            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        elif mlow in ("humidity", "rh"):
-            self._attr_native_unit_of_measurement = PERCENTAGE
-        elif mlow == "co2":
-            self._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
+        if meta:
+            unit, device_class = meta[1], meta[2]
+            if unit:
+                self._attr_native_unit_of_measurement = unit
+            if device_class:
+                self._attr_device_class = device_class
+
+        self._attr_state_class = None
 
         self.refresh_availability()
 
@@ -173,8 +215,13 @@ class EtBusValueSensor(SensorEntity):
     def handle_value(self, value: Any, payload: dict[str, Any]) -> None:
         self._native_value = value
         self.refresh_availability()
+        self._attr_state_class = "measurement" if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
-        unit = payload.get("unit")
+        unit = None
+        units = payload.get("units")
+        if isinstance(units, dict):
+            unit = units.get(self._metric)
+        unit = unit or payload.get("unit")
         if unit and not getattr(self, "_attr_native_unit_of_measurement", None):
             self._attr_native_unit_of_measurement = unit
 

@@ -30,12 +30,17 @@ static void connectWiFi() {
 }
 
 static void publishState() {
-  StaticJsonDocument<192> doc;
+  StaticJsonDocument<320> doc;
   JsonObject payload = doc.to<JsonObject>();
 
   payload["co2"] = random(420, 850);
   payload["temp"] = random(190, 280) / 10.0;
   payload["humidity"] = random(420, 700) / 10.0;
+  payload["pressure"] = random(9900, 10350) / 10.0;
+  payload["tvoc"] = random(0, 500);
+  payload["pm2_5"] = random(0, 250) / 10.0;
+  payload["lux"] = random(20, 800);
+  payload["battery"] = random(850, 1000) / 10.0;
 
   etbus.sendState(payload);
 }

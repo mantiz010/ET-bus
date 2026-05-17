@@ -23,10 +23,15 @@ String psk;
 #define RESET_PIN 0
 
 static void publishState() {
-    StaticJsonDocument<128> payload;
+    StaticJsonDocument<320> payload;
     payload["co2"] = random(400, 900);
     payload["temp"] = random(200, 300) / 10.0;
     payload["humidity"] = random(400, 700) / 10.0;
+    payload["pressure"] = random(9900, 10350) / 10.0;
+    payload["tvoc"] = random(0, 500);
+    payload["pm2_5"] = random(0, 250) / 10.0;
+    payload["lux"] = random(20, 800);
+    payload["battery"] = random(850, 1000) / 10.0;
 
     Serial.print("[ETBUS] sending: ");
     serializeJson(payload, Serial);
