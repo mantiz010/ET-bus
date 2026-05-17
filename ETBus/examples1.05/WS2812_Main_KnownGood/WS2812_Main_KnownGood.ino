@@ -46,9 +46,21 @@ static void connectWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(250);
     if (millis() - start > 20000) {
-      ESP.restart();
+      break;
     }
   }
+}
+
+static bool wifiReady() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+
+  static uint32_t lastReconnect = 0;
+  if (millis() - lastReconnect > 5000) {
+    lastReconnect = millis();
+    WiFi.disconnect(false);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+  }
+  return false;
 }
 
 static void renderLight() {
@@ -141,6 +153,7 @@ void setup() {
   delay(300);
 
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, LED_COUNT);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
   FastLED.clear(true);
 
   connectWiFi();
@@ -158,13 +171,19 @@ void setup() {
 }
 
 void loop() {
+  if (!wifiReady()) {
+    renderLight();
+    delay(0);
+    return;
+  }
+
   etbus.loop();
 
   static uint32_t lastWifiCheck = 0;
   if (millis() - lastWifiCheck > 5000) {
     lastWifiCheck = millis();
     if (WiFi.status() != WL_CONNECTED) {
-      ESP.restart();
+      WiFi.reconnect();
     }
   }
 
