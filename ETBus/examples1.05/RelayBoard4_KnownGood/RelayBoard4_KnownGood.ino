@@ -33,6 +33,7 @@ static void writeRelay(uint8_t index, bool on, bool persist = true) {
   relayOn[index] = on;
   digitalWrite(RELAY_PINS[index], on == RELAY_ACTIVE_HIGH ? HIGH : LOW);
   if (persist) saveRelayState(index);
+  Serial.printf("[RELAY] %u -> %s\n", (unsigned)(index + 1), on ? "ON" : "OFF");
 }
 
 static void restoreRelayState() {
@@ -72,7 +73,8 @@ static void publishSwitchDiscovery() {
     sw["name"] = String("Relay ") + String(i + 1);
   }
 
-  etbus.sendDiscover(payload);
+  etbus.sendState(payload);
+  Serial.println("[ETBUS] relay discovery/state sent");
 }
 
 static void publishRelayState() {
@@ -85,6 +87,8 @@ static void publishRelayState() {
   }
 
   etbus.sendState(payload);
+  Serial.printf("[ETBUS] relay state sent: 1=%d 2=%d 3=%d 4=%d\n",
+                relayOn[0], relayOn[1], relayOn[2], relayOn[3]);
 }
 
 static void onEtbusCommand(const char* dev_class, JsonObject payload) {
@@ -101,6 +105,7 @@ static void onEtbusCommand(const char* dev_class, JsonObject payload) {
     return;
   }
 
+  Serial.printf("[ETBUS] command relay %s -> %s\n", switchId, ((bool)payload["on"]) ? "ON" : "OFF");
   writeRelay((uint8_t)index, (bool)payload["on"]);
   etbus.sendAck("switch", true);
   publishRelayState();
