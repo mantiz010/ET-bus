@@ -18,6 +18,7 @@ For each sketch folder:
 - `AirSensor_KnownGood`: encrypted fake air sensor state for live update testing.
 - `RelayBoard4_KnownGood`: encrypted 4-relay board with HA command handling and state reporting.
 - `RGBLed_KnownGood`: encrypted WS2812 RGB light with effects, brightness, and state reporting. Requires the `FastLED` library.
+- `WS2812_Main_KnownGood`: the main WS2812/WSB FastLED sketch using device ID `RGB1`.
 
 ## Notes
 
