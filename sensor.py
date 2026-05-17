@@ -80,7 +80,7 @@ async def async_setup_entry(
     hub.register_listener(_on_message)
     hass.bus.async_listen("etbus_device_status", _on_status)
 
-    _LOGGER.info("ET-Bus sensor platform ready")
+    _LOGGER.debug("ET-Bus sensor platform ready")
 
 
 @callback
@@ -118,7 +118,7 @@ def _get_or_create_and_update(
         ent = EtBusValueSensor(hub, m.dev_id, m.cls, endpoint, metric)
         _ENTITIES[k] = ent
         async_add_entities([ent])
-        _LOGGER.info("ET-Bus created sensor: %s", k)
+        _LOGGER.debug("ET-Bus created sensor: %s", k)
 
     ent.handle_value(value, payload)
 

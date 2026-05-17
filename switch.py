@@ -40,7 +40,7 @@ async def async_setup_entry(
         # Check if this is a multi-switch device
         if "switches" in info and isinstance(info["switches"], list):
             if len(info["switches"]) > 0 and isinstance(info["switches"][0], dict):
-                _LOGGER.info(
+                _LOGGER.debug(
                     "ET-Bus: discovered multi-switch device %s with %s switches",
                     dev_id, len(info['switches'])
                 )
@@ -58,7 +58,7 @@ async def async_setup_entry(
                     # Restore individual switch state from persisted data
                     initial_on = bool(saved_switches.get(switch_id, False))
                     
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         "ET-Bus: creating switch entity %s_%s (%s) restored_on=%s",
                         dev_id, switch_id, switch_name, initial_on,
                     )
@@ -79,7 +79,7 @@ async def async_setup_entry(
                 return
         
         # Single switch device (legacy/simple)
-        _LOGGER.info("ET-Bus: discovered single switch %s", dev_id)
+        _LOGGER.debug("ET-Bus: discovered single switch %s", dev_id)
 
         # Restore single switch state
         initial_on = False
@@ -122,7 +122,7 @@ async def async_setup_entry(
                 if len(payload["switches"]) > 0:
                     first_switch = payload["switches"][0]
                     if isinstance(first_switch, dict) and "id" in first_switch:
-                        _LOGGER.info(
+                        _LOGGER.debug(
                             "ET-Bus: detected multi-switch discovery in %s message for %s",
                             msg_type, dev_id
                         )
@@ -173,7 +173,7 @@ class ETBusSingleSwitch(SwitchEntity):
         }
 
         if initial_on:
-            _LOGGER.info("ET-Bus switch %s: restored on=%s from persisted state", dev_id, initial_on)
+            _LOGGER.debug("ET-Bus switch %s: restored on=%s from persisted state", dev_id, initial_on)
 
     @property
     def available(self) -> bool:
@@ -257,7 +257,7 @@ class ETBusMultiSwitch(SwitchEntity):
         }
 
         if initial_on:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "ET-Bus switch %s_%s: restored on=%s from persisted state",
                 dev_id, switch_id, initial_on,
             )
@@ -315,6 +315,3 @@ class ETBusMultiSwitch(SwitchEntity):
             self._dev_id, self._dev_class,
             {"switch_id": self._switch_id, "on": False},
         )
-    def _send_command(self) -> None:
-        # Unicast if the hub knows the device IP (commercial-grade for Wi-Fi)
-        self._hub.send_command(self._dev_id, self._dev_class, {"on": self._is_on})

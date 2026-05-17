@@ -43,7 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 ent = EtBusFan(hub, dev_id, dev_class, endpoint, name, saved)
                 entities[key] = ent
                 async_add_entities([ent])
-                _LOGGER.info("ET-Bus: discovered %s %s", dev_class, dev_id)
+                _LOGGER.debug("ET-Bus: discovered %s %s", dev_class, dev_id)
 
             # Always update HA entity from device-reported state
             if mtype == "state":
@@ -81,7 +81,7 @@ class EtBusFan(FanEntity):
         if saved_state and isinstance(saved_state, dict):
             sp = saved_state.get("payload", {})
             if sp:
-                _LOGGER.info("ET-Bus fan %s: restoring from persisted state: %s", dev_id, sp)
+                _LOGGER.debug("ET-Bus fan %s: restoring from persisted state: %s", dev_id, sp)
                 self._apply_payload(sp)
 
         self._attr_unique_id = f"etbus_{dev_id}_{endpoint}"

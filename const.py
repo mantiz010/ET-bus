@@ -6,7 +6,7 @@ DEFAULT_HOST_MCAST = "239.10.0.1"
 DEFAULT_PORT = 5555
 
 PING_INTERVAL = 10          # seconds
-OFFLINE_TIMEOUT = 25        # seconds
+OFFLINE_TIMEOUT = 95        # seconds
 
 CONF_PORT = "port"
 CONF_CRYPTO_ENABLED = "crypto_enabled"

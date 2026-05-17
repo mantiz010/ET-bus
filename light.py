@@ -98,7 +98,7 @@ async def async_setup_entry(
                 ent = EtBusRgbLight(hub, dev_id, name, effects, saved)
                 entities[dev_id] = ent
                 async_add_entities([ent])
-                _LOGGER.info("ET-Bus: discovered RGB light %s with %s effects", dev_id, len(effects))
+                _LOGGER.debug("ET-Bus: discovered RGB light %s with %s effects", dev_id, len(effects))
 
             # Always update HA entity from device-reported state
             entities[dev_id].handle_state(payload)
@@ -137,7 +137,7 @@ class EtBusRgbLight(LightEntity):
         if saved_state and isinstance(saved_state, dict):
             sp = saved_state.get("payload", {})
             if sp:
-                _LOGGER.info("ET-Bus light %s: restoring from persisted state: %s", dev_id, sp)
+                _LOGGER.debug("ET-Bus light %s: restoring from persisted state: %s", dev_id, sp)
                 self._apply_payload(sp)
 
         # Use device effects if provided, otherwise use defaults
@@ -218,7 +218,7 @@ class EtBusRgbLight(LightEntity):
             eff = str(payload["effect"])
             if eff not in self._effect_list:
                 self._effect_list.append(eff)
-                _LOGGER.info("ET-Bus light %s: learned new effect '%s'", self._dev_id, eff)
+                _LOGGER.debug("ET-Bus light %s: learned new effect '%s'", self._dev_id, eff)
 
         self.async_write_ha_state()
 
@@ -263,5 +263,3 @@ class EtBusRgbLight(LightEntity):
         }
         self._hub.send_command(self._dev_id, "light.rgb", payload)
         _LOGGER.debug("ET-Bus light %s: sent command %s", self._dev_id, payload)
-        }
-        self._hub.send_command(self._dev_id, "light.rgb", payload)

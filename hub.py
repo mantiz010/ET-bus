@@ -30,6 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_KEY = "etbus_last_commands"
 STORAGE_VERSION = 1
 STORAGE_KEY_DEVICE_STATE = "etbus_device_states"
+STORAGE_KEY_TX_CTR = "etbus_tx_counters"
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
@@ -103,6 +104,7 @@ class EtBusHub:
         # can restore their state on HA reboot WITHOUT sending commands
         self._last_reported_state: dict[str, dict[str, Any]] = {}
         self._state_store = Store(hass, STORAGE_VERSION, STORAGE_KEY_DEVICE_STATE)
+        self._tx_ctr_store = Store(hass, STORAGE_VERSION, STORAGE_KEY_TX_CTR)
 
         # per-device tx ctr for commands
         self._tx_ctr: dict[str, int] = {}
@@ -111,7 +113,7 @@ class EtBusHub:
 
         self._hub_start_time = int(time.time())
 
-        _LOGGER.info("ET-Bus hub init port=%s crypto=%s startup_time=%s",
+        _LOGGER.debug("ET-Bus hub init port=%s crypto=%s startup_time=%s",
                      self.port, self.crypto_enabled, self._hub_start_time)
 
     def register_listener(self, cb: Callable[[dict[str, Any]], None]) -> None:
@@ -121,6 +123,7 @@ class EtBusHub:
         # Load persisted data from disk before anything else
         await self._load_last_commands()
         await self._load_device_states()
+        await self._load_tx_counters()
 
         self._open_socket()
         self._task = asyncio.create_task(self._rx_loop())
@@ -135,6 +138,7 @@ class EtBusHub:
         # Persist before shutting down
         await self._save_last_commands()
         await self._save_device_states()
+        await self._save_tx_counters()
         await self.async_stop()
 
     async def async_stop(self) -> None:
@@ -158,7 +162,7 @@ class EtBusHub:
             data = await self._store.async_load()
             if isinstance(data, dict):
                 self._last_command = data
-                _LOGGER.info("✅ ETBUS: Loaded %d persisted device commands", len(data))
+                _LOGGER.debug("ETBUS: Loaded %d persisted device commands", len(data))
             else:
                 self._last_command = {}
         except Exception:
@@ -182,7 +186,7 @@ class EtBusHub:
             data = await self._state_store.async_load()
             if isinstance(data, dict):
                 self._last_reported_state = data
-                _LOGGER.info("✅ ETBUS: Loaded %d persisted device states", len(data))
+                _LOGGER.debug("ETBUS: Loaded %d persisted device states", len(data))
             else:
                 self._last_reported_state = {}
         except Exception:
@@ -203,6 +207,39 @@ class EtBusHub:
     def get_last_reported_state(self, dev_id: str) -> dict[str, Any] | None:
         """Get the last reported state for a device (for entity restoration)."""
         return self._last_reported_state.get(dev_id)
+
+    async def _load_tx_counters(self) -> None:
+        """Load HA->device encrypted command counters.
+
+        ESP nodes reject old command counters as replay protection. Persisting
+        HA's transmit counters prevents a Home Assistant restart from forcing
+        an ESP reboot before commands are accepted again.
+        """
+        try:
+            data = await self._tx_ctr_store.async_load()
+            if isinstance(data, dict):
+                self._tx_ctr = {
+                    str(k): int(v)
+                    for k, v in data.items()
+                    if isinstance(v, (int, float, str)) and str(v).isdigit()
+                }
+                _LOGGER.debug("ETBUS: Loaded %d tx counters", len(self._tx_ctr))
+            else:
+                self._tx_ctr = {}
+        except Exception:
+            _LOGGER.exception("ET-Bus: failed to load tx counters")
+            self._tx_ctr = {}
+
+    async def _save_tx_counters(self) -> None:
+        """Persist HA->device encrypted command counters."""
+        try:
+            await self._tx_ctr_store.async_save(dict(self._tx_ctr))
+        except Exception:
+            _LOGGER.exception("ET-Bus: failed to persist tx counters")
+
+    def _schedule_save_tx_counters(self) -> None:
+        """Fire-and-forget save of tx counters."""
+        asyncio.ensure_future(self._save_tx_counters())
 
     # ── Socket ───────────────────────────────────────────────────────────
 
@@ -226,7 +263,7 @@ class EtBusHub:
 
         sock.setblocking(False)
         self._sock = sock
-        _LOGGER.info("ET-Bus UDP bound %s:%s", mcast_ip, port)
+        _LOGGER.debug("ET-Bus UDP bound %s:%s", mcast_ip, port)
 
     def _derive_key_for_dev(self, dev_id: str) -> bytes | None:
         if not self.crypto_enabled or not self.master_secret:
@@ -361,13 +398,17 @@ class EtBusHub:
         # Device reboot detection (ctr reset)
         if ctr <= last:
             drop = last - ctr
+            if ctr == last:
+                # Duplicate packet, usually because a device sends both unicast
+                # and multicast. The first copy was accepted; drop this quietly.
+                return None
             # Accept reset only for very low ctr, or huge drop
             if ctr in (0, 1) or ctr < 30 or drop >= 50:
-                _LOGGER.warning("✅ ETBUS DEVICE REBOOT: dev=%s ctr=%s last=%s drop=%s", dev_id, ctr, last, drop)
+                _LOGGER.debug("ETBUS DEVICE REBOOT: dev=%s ctr=%s last=%s drop=%s", dev_id, ctr, last, drop)
                 # Device has NVS persistence — it restores its own state.
                 # We just accept the counter reset and let the state report through.
             else:
-                _LOGGER.warning("❌ ETBUS REPLAY: dev=%s ctr=%s last=%s drop=%s", dev_id, ctr, last, drop)
+                _LOGGER.warning("ETBUS REPLAY: dev=%s ctr=%s last=%s drop=%s", dev_id, ctr, last, drop)
                 return None
 
         nonce_b64 = wrapper.get("nonce")
@@ -442,8 +483,15 @@ class EtBusHub:
         if not key:
             return None
 
-        ctr = int(self._tx_ctr.get(dev_id, 0) + 1)
+        if dev_id in self._tx_ctr:
+            ctr = int(self._tx_ctr.get(dev_id, 0) + 1)
+        else:
+            # First run after upgrading from the old in-memory counter.
+            # Use a high monotonic-enough value so ESP nodes with an old
+            # remembered command counter do not reject HA as a replay.
+            ctr = int(time.time())
         self._tx_ctr[dev_id] = ctr
+        self._schedule_save_tx_counters()
 
         nonce = self._nonce_cmd(ctr)
         pt = json.dumps(plain, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -496,7 +544,7 @@ class EtBusHub:
             },
         }
         self._udp_send(DEFAULT_HOST_MCAST, int(self.port), msg, multicast=True)
-        _LOGGER.info("✅ ETBUS: Sent startup ping (ts=%s)", self._hub_start_time)
+        _LOGGER.debug("ETBUS: Sent startup ping (ts=%s)", self._hub_start_time)
 
     def _send_ping_multicast(self) -> None:
         msg = {

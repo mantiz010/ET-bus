@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 
 from aiohttp import web
-
 from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
@@ -18,6 +17,8 @@ VIEW_URL = f"/{DOMAIN}/etbus.html"        # iframe loads this
 PANEL_TITLE = "ET-Bus"
 PANEL_ICON = "mdi:lan"
 
+LAN_PREFIX = "172.168.1."  # <-- change if needed
+
 _HTML_CACHE: str | None = None
 
 
@@ -26,10 +27,15 @@ class EtBusHtmlView(HomeAssistantView):
 
     url = VIEW_URL
     name = "etbus:html"
-    requires_auth = False  # ✅ stops 401 in iframe
+    requires_auth = False  # ✅ NO LOGIN
 
-    async def get(self, request):
+    async def get(self, request: web.Request) -> web.Response:
         global _HTML_CACHE
+
+        # LAN-only protection
+        peer = request.remote or ""
+        if not peer.startswith(LAN_PREFIX):
+            raise web.HTTPForbidden(text="LAN only")
 
         if _HTML_CACHE is None:
             return web.Response(
@@ -38,18 +44,13 @@ class EtBusHtmlView(HomeAssistantView):
                 content_type="text/plain",
             )
 
-        return web.Response(
-            text=_HTML_CACHE,
-            status=200,
-            content_type="text/html",
-        )
+        return web.Response(text=_HTML_CACHE, status=200, content_type="text/html")
 
 
 async def async_setup_panel(hass: HomeAssistant) -> None:
     """Register ET-Bus sidebar panel + HTTP view that serves cached HTML."""
     global _HTML_CACHE
 
-    # Load HTML ONCE (executor) to avoid blocking event loop
     if _HTML_CACHE is None:
         file_path = Path(__file__).parent / "www" / "etbus.html"
 
@@ -58,23 +59,21 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
 
         try:
             _HTML_CACHE = await hass.async_add_executor_job(_read_file)
-            _LOGGER.info("ET-Bus UI loaded from %s", file_path)
+            _LOGGER.debug("ET-Bus UI loaded from %s", file_path)
         except Exception as e:
             _LOGGER.error("ET-Bus UI file read failed: %s", e)
             _HTML_CACHE = (
-                "<html><body style='font-family:monospace'>"
+                "<!doctype html><html><body style='font-family:monospace'>"
                 "<h2>ET-Bus UI missing</h2>"
                 "<p>Could not read: custom_components/etbus/www/etbus.html</p>"
                 "</body></html>"
             )
 
-    # Register view once
     if not hass.data.get(f"{DOMAIN}_view_loaded"):
         hass.http.register_view(EtBusHtmlView)
         hass.data[f"{DOMAIN}_view_loaded"] = True
-        _LOGGER.info("ET-Bus HTTP view registered at %s", VIEW_URL)
+        _LOGGER.debug("ET-Bus HTTP view registered at %s", VIEW_URL)
 
-    # Register sidebar panel
     async_register_built_in_panel(
         hass,
         component_name="iframe",
@@ -85,7 +84,7 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
         require_admin=False,
     )
 
-    _LOGGER.info("ET-Bus panel registered at /%s -> %s", PANEL_URL_PATH, VIEW_URL)
+    _LOGGER.debug("ET-Bus panel registered at /%s -> %s", PANEL_URL_PATH, VIEW_URL)
 
 
 async def async_unload_panel(hass: HomeAssistant) -> None:
