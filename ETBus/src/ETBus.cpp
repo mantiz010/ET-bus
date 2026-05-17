@@ -550,6 +550,25 @@ void ETBus::sendDiscover() {
   _sendEnvelopePlain("discover", p, true);
 }
 
+void ETBus::sendDiscover(JsonObject extra_payload) {
+  StaticJsonDocument<768> pdoc;
+  JsonObject p = pdoc.to<JsonObject>();
+  p["name"] = _name ? _name : "";
+  p["fw"] = _fw ? _fw : "";
+  p["lib"] = ETBUS_LIBRARY_VERSION;
+  p["boot"] = _bootId;
+  JsonArray features = p.createNestedArray("features");
+  features.add("encrypted");
+  features.add("ack");
+  features.add("sync");
+
+  for (JsonPair kv : extra_payload) {
+    p[kv.key()] = kv.value();
+  }
+
+  _sendEnvelopePlain("discover", p, true);
+}
+
 void ETBus::sendPong() {
   StaticJsonDocument<256> pdoc;
   JsonObject p = pdoc.to<JsonObject>();

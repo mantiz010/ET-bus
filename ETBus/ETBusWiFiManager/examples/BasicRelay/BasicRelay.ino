@@ -8,11 +8,13 @@
 
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include <ETBusWiFiManager.h>
 #include <ETBus.h>
 
 ETBusWiFiManager wm;
 ETBus etbus;
+Preferences prefs;
 
 String devName;
 String psk;
@@ -25,10 +27,25 @@ static const bool RELAY_ACTIVE_HIGH = true;
 
 bool relayOn[RELAY_COUNT] = {false, false, false, false};
 
-static void writeRelay(uint8_t index, bool on) {
+static void saveRelayState(uint8_t index) {
+    char key[8];
+    snprintf(key, sizeof(key), "r%u", (unsigned)index);
+    prefs.putBool(key, relayOn[index]);
+}
+
+static void writeRelay(uint8_t index, bool on, bool persist = true) {
     if (index >= RELAY_COUNT) return;
     relayOn[index] = on;
     digitalWrite(RELAY_PINS[index], on == RELAY_ACTIVE_HIGH ? HIGH : LOW);
+    if (persist) saveRelayState(index);
+}
+
+static void restoreRelayState() {
+    for (uint8_t i = 0; i < RELAY_COUNT; i++) {
+        char key[8];
+        snprintf(key, sizeof(key), "r%u", (unsigned)i);
+        writeRelay(i, prefs.getBool(key, false), false);
+    }
 }
 
 static void publishSwitchDiscovery() {
@@ -46,7 +63,7 @@ static void publishSwitchDiscovery() {
         sw["name"] = String("Relay ") + String(i + 1);
     }
 
-    etbus.sendState(payload);
+    etbus.sendDiscover(payload);
 }
 
 static void publishRelayState() {
@@ -92,8 +109,9 @@ void setup() {
 
     for (uint8_t i = 0; i < RELAY_COUNT; i++) {
         pinMode(RELAY_PINS[i], OUTPUT);
-        writeRelay(i, false);
     }
+    prefs.begin("etbus-relay", false);
+    restoreRelayState();
 
     pinMode(RESET_PIN, INPUT_PULLUP);
     if (digitalRead(RESET_PIN) == LOW) {

@@ -58,6 +58,7 @@ public:
 
   // Plaintext discovery plane
   void sendDiscover();
+  void sendDiscover(JsonObject extra_payload);
   void sendPong();
   void sendAck(const char* command_id = nullptr, bool ok = true);
   void sendError(const char* code, const char* message = nullptr);
