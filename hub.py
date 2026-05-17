@@ -110,6 +110,7 @@ class EtBusHub:
         self._tx_ctr: dict[str, int] = {}
         # anti-replay for incoming encrypted STATE
         self._rx_state_last_ctr: dict[str, int] = {}
+        self._rx_state_boot: dict[str, str] = {}
 
         self._hub_start_time = int(time.time())
 
@@ -305,6 +306,7 @@ class EtBusHub:
 
             if dev_id != self.hub_id:
                 self._touch_device(dev_id, src_ip, mtype)
+                self._handle_device_envelope(dev_id, msg, src_ip, mtype)
 
             was_encrypted = (self.crypto_enabled and isinstance(payload, dict) and payload.get("_enc") == 1)
 
@@ -320,6 +322,8 @@ class EtBusHub:
                 "id": dev_id,
                 "type": mtype,
                 "class": msg.get("class", ""),
+                "boot": msg.get("boot", ""),
+                "seq": msg.get("seq", 0),
                 "payload": msg.get("payload", {}),
                 "_src_ip": src_ip,
                 "_rx_ts": rx_ts,
@@ -375,6 +379,39 @@ class EtBusHub:
         # The device has its own NVS persistence and will report
         # its current state via pong/discover/state messages.
         # HA entities will update from those state reports.
+
+    def _handle_device_envelope(self, dev_id: str, msg: dict[str, Any], src_ip: str, mtype: str) -> None:
+        """Track ETBus 1.7 envelope metadata without breaking old devices."""
+        info = self.devices.setdefault(dev_id, {})
+
+        boot = str(msg.get("boot", "") or "")
+        if boot:
+            old_boot = self._rx_state_boot.get(dev_id)
+            if old_boot and old_boot != boot:
+                _LOGGER.debug(
+                    "ETBUS DEVICE BOOT: dev=%s boot=%s old=%s ip=%s reason=%s",
+                    dev_id,
+                    boot,
+                    old_boot,
+                    src_ip,
+                    mtype,
+                )
+                self._rx_state_last_ctr[dev_id] = 0
+            self._rx_state_boot[dev_id] = boot
+            info["boot"] = boot
+
+        seq = msg.get("seq")
+        if isinstance(seq, int):
+            info["seq"] = seq
+
+        payload = msg.get("payload")
+        if mtype == "discover" and isinstance(payload, dict):
+            lib = payload.get("lib")
+            if lib:
+                info["lib"] = str(lib)
+            features = payload.get("features")
+            if isinstance(features, list):
+                info["features"] = [str(x) for x in features]
 
     def _decrypt_wrapper_state(
         self, *, dev_id: str, wrapper: dict[str, Any], src_ip: str
