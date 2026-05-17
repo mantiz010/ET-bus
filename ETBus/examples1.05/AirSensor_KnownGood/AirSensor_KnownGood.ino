@@ -11,7 +11,7 @@
 
 static const char* DEVICE_ID = "sensor2";
 static const char* DEVICE_NAME = "ET-Bus Air Sensor";
-static const char* FW_VERSION = "examples1.05-air";
+static const char* FW_VERSION = "examples1.7-air";
 
 ETBus etbus;
 
@@ -51,6 +51,7 @@ void setup() {
   }
 
   etbus.begin(DEVICE_ID, "sensor.air", DEVICE_NAME, FW_VERSION);
+  etbus.onSync(publishState);
   publishState();
 }
 

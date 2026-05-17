@@ -215,8 +215,6 @@ void setup() {
 
     psk = wm.getPSK();
 
-    etbus.begin(devName.c_str(), "light.rgb", "RGB LED Strip", "v1.0");
-
     if (psk.length() == 64) {
         if (etbus.enableEncryptionHex(psk.c_str())) {
             Serial.println("[ETBUS] Encrypted (key from portal)");
@@ -225,7 +223,9 @@ void setup() {
         Serial.println("[ETBUS] No PSK — running unencrypted");
     }
 
+    etbus.begin(devName.c_str(), "light.rgb", "RGB LED Strip", "v1.7");
     etbus.onCommand(onCommand);
+    etbus.onSync(sendLedState);
     delay(150);
     sendLedState();
 

@@ -17,7 +17,7 @@
 
 static const char* DEVICE_ID = "RGB1";
 static const char* DEVICE_NAME = "ET-Bus RGB LED";
-static const char* FW_VERSION = "examples1.05-rgb";
+static const char* FW_VERSION = "examples1.7-rgb";
 
 CRGB leds[LED_COUNT];
 ETBus etbus;
@@ -151,6 +151,7 @@ void setup() {
 
   etbus.begin(DEVICE_ID, "light.rgb", DEVICE_NAME, FW_VERSION);
   etbus.onCommand(onEtbusCommand);
+  etbus.onSync(publishState);
 
   renderLight();
   publishState();

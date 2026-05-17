@@ -22,6 +22,19 @@ String psk;
 
 #define RESET_PIN 0
 
+static void publishState() {
+    StaticJsonDocument<128> payload;
+    payload["co2"] = random(400, 900);
+    payload["temp"] = random(200, 300) / 10.0;
+    payload["humidity"] = random(400, 700) / 10.0;
+
+    Serial.print("[ETBUS] sending: ");
+    serializeJson(payload, Serial);
+    Serial.println();
+
+    etbus.sendState(payload.as<JsonObject>());
+}
+
 void setup() {
     Serial.begin(115200);
     delay(300);
@@ -45,8 +58,6 @@ void setup() {
 
     psk = wm.getPSK();
 
-    etbus.begin(devName.c_str(), "sensor.air", "Air Sensor", "v1.0");
-
     if (psk.length() == 64) {
         if (etbus.enableEncryptionHex(psk.c_str())) {
             Serial.println("[ETBUS] Encrypted (key from portal)");
@@ -55,6 +66,9 @@ void setup() {
         Serial.println("[ETBUS] No PSK — running unencrypted");
     }
 
+    etbus.begin(devName.c_str(), "sensor.air", "Air Sensor", "v1.7");
+    etbus.onSync(publishState);
+    publishState();
     Serial.println("[BOOT] READY\n");
 }
 
@@ -75,16 +89,6 @@ void loop() {
     static unsigned long lastSend = 0;
     if (millis() - lastSend > 2000) {
         lastSend = millis();
-
-        StaticJsonDocument<128> payload;
-        payload["co2"] = random(400, 900);
-        payload["temp"] = random(200, 300) / 10.0;
-        payload["humidity"] = random(400, 700) / 10.0;
-
-        Serial.print("[ETBUS] sending: ");
-        serializeJson(payload, Serial);
-        Serial.println();
-
-        etbus.sendState(payload.as<JsonObject>());
+        publishState();
     }
 }

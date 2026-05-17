@@ -17,7 +17,7 @@
 
 static const char* DEVICE_ID = "RGB1";
 static const char* DEVICE_NAME = "RGB Ring 1";
-static const char* FW_VERSION = "ws2812-main-1.05";
+static const char* FW_VERSION = "ws2812-main-1.7";
 
 CRGB leds[LED_COUNT];
 ETBus etbus;
@@ -151,6 +151,7 @@ void setup() {
 
   etbus.begin(DEVICE_ID, "light.rgb", DEVICE_NAME, FW_VERSION);
   etbus.onCommand(onEtbusCommand);
+  etbus.onSync(publishState);
 
   renderLight();
   publishState();

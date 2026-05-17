@@ -11,7 +11,7 @@
 
 static const char* DEVICE_ID = "relay_board";
 static const char* DEVICE_NAME = "ET-Bus 4 Relay Board";
-static const char* FW_VERSION = "examples1.05-relay4";
+static const char* FW_VERSION = "examples1.7-relay4";
 
 static const uint8_t RELAY_COUNT = 4;
 static const uint8_t RELAY_PINS[RELAY_COUNT] = {16, 17, 18, 19};
@@ -72,13 +72,25 @@ static void publishRelayState() {
 
 static void onEtbusCommand(const char* dev_class, JsonObject payload) {
   if (!dev_class || strcmp(dev_class, "switch.multi") != 0) return;
-  if (!payload.containsKey("switch_id") || !payload.containsKey("on")) return;
+  if (!payload.containsKey("switch_id") || !payload.containsKey("on")) {
+    etbus.sendError("bad_command", "switch_id and on are required");
+    return;
+  }
 
   const char* switchId = payload["switch_id"] | "";
   const int index = atoi(switchId) - 1;
-  if (index < 0 || index >= RELAY_COUNT) return;
+  if (index < 0 || index >= RELAY_COUNT) {
+    etbus.sendError("bad_switch", "switch_id out of range");
+    return;
+  }
 
   writeRelay((uint8_t)index, (bool)payload["on"]);
+  etbus.sendAck("switch", true);
+  publishRelayState();
+}
+
+static void onEtbusSync() {
+  publishSwitchDiscovery();
   publishRelayState();
 }
 
@@ -99,6 +111,7 @@ void setup() {
 
   etbus.begin(DEVICE_ID, "switch.multi", DEVICE_NAME, FW_VERSION);
   etbus.onCommand(onEtbusCommand);
+  etbus.onSync(onEtbusSync);
 
   publishSwitchDiscovery();
   publishRelayState();
