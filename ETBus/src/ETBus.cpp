@@ -372,13 +372,13 @@ bool ETBus::_decryptIncomingCommand(JsonObject in_wrapper, JsonObject out_plain_
   uint8_t nonce[12]; size_t nonce_len = 0;
   if (!_b64decode(nonce_b64, nonce, sizeof(nonce), nonce_len) || nonce_len != 12) return false;
 
-  uint8_t ct[1024]; size_t ct_len = 0;
+  static uint8_t ct[1024]; size_t ct_len = 0;
   if (!_b64decode(ct_b64, ct, sizeof(ct), ct_len) || ct_len == 0) return false;
 
   uint8_t tag[16]; size_t tag_len = 0;
   if (!_b64decode(tag_b64, tag, sizeof(tag), tag_len) || tag_len != 16) return false;
 
-  uint8_t pt[1024];
+  static uint8_t pt[1024];
   if (ct_len >= sizeof(pt)) return false;
 
   _printCryptoPacket("DEC CMD", ctr, nonce, ct, ct_len, tag);
@@ -404,7 +404,8 @@ bool ETBus::_decryptIncomingCommand(JsonObject in_wrapper, JsonObject out_plain_
 
   pt[ct_len] = 0;
 
-  StaticJsonDocument<1024> tmp;
+  static StaticJsonDocument<1024> tmp;
+  tmp.clear();
   if (deserializeJson(tmp, (const char*)pt)) return false;
 
   if (!tmp.is<JsonObject>()) return false;
@@ -426,7 +427,7 @@ bool ETBus::_encryptWrapperState(JsonObject plain, uint64_t ctr, JsonObject out_
 #if ETBUS_ENABLE_ENCRYPTION
   if (!_crypto_enabled) return false;
 
-  char pt_buf[768];
+  static char pt_buf[768];
   size_t pt_len = serializeJson(plain, pt_buf, sizeof(pt_buf));
   if (pt_len == 0 || pt_len >= sizeof(pt_buf)) return false;
 
@@ -434,7 +435,7 @@ bool ETBus::_encryptWrapperState(JsonObject plain, uint64_t ctr, JsonObject out_
   nonce[0] = 0x01; nonce[1] = 0x00; nonce[2] = 0x00; nonce[3] = 0x00;
   _u64_le(&nonce[4], ctr);
 
-  uint8_t ct[768];
+  static uint8_t ct[768];
   uint8_t tag[16];
 
   bool ok = ETChaCha20Poly1305::encrypt(
@@ -449,7 +450,7 @@ bool ETBus::_encryptWrapperState(JsonObject plain, uint64_t ctr, JsonObject out_
 
   _printCryptoPacket("ENC STATE", ctr, nonce, ct, pt_len, tag);
 
-  char nonce_b64[64], ct_b64[1100], tag_b64[64];
+  static char nonce_b64[64], ct_b64[1100], tag_b64[64];
   if (!_b64encode(nonce, sizeof(nonce), nonce_b64, sizeof(nonce_b64))) return false;
   if (!_b64encode(ct, pt_len, ct_b64, sizeof(ct_b64))) return false;
   if (!_b64encode(tag, sizeof(tag), tag_b64, sizeof(tag_b64))) return false;
@@ -476,7 +477,8 @@ bool ETBus::_encryptWrapperState(JsonObject plain, uint64_t ctr, JsonObject out_
 }
 
 void ETBus::_sendEnvelopePlain(const char* type, JsonObject payload, bool allow_multicast) {
-  StaticJsonDocument<1200> doc;
+  static StaticJsonDocument<1200> doc;
+  doc.clear();
 
   doc["v"] = 1;
   doc["type"] = type;
@@ -493,7 +495,7 @@ void ETBus::_sendEnvelopePlain(const char* type, JsonObject payload, bool allow_
   IPAddress target = _hubKnown ? _hubIP : _mcastIP;
   if (!_hubKnown && !allow_multicast) return;
 
-  char buf[1500];
+  static char buf[1500];
   size_t n = serializeJson(doc, buf, sizeof(buf));
   if (!n) return;
 
@@ -505,7 +507,8 @@ void ETBus::_sendEnvelopePlain(const char* type, JsonObject payload, bool allow_
 void ETBus::_sendEnvelopeEncryptedState(JsonObject plain_payload) {
 #if ETBUS_ENABLE_ENCRYPTION
   // IMPORTANT: wrapper is built INSIDE the final envelope doc (no cross-doc object assignment)
-  StaticJsonDocument<1700> env;
+  static StaticJsonDocument<1700> env;
+  env.clear();
 
   env["v"] = 1;
   env["type"] = "state";
@@ -521,7 +524,7 @@ void ETBus::_sendEnvelopeEncryptedState(JsonObject plain_payload) {
 
   IPAddress target = _hubKnown ? _hubIP : _mcastIP;
 
-  char buf[1900];
+  static char buf[1900];
   size_t n = serializeJson(env, buf, sizeof(buf));
   if (!n) return;
 
