@@ -571,6 +571,9 @@ void ETBus::loop() {
   if (!payload.isNull() && (type[0]=='p' && type[1]=='i' && type[2]=='n' && type[3]=='g')) {
     _learnHub(from, "ping");
     _maybeLearnPortFromPing(payload);
+    sendDiscover();
+    sendPong();
+    _lastPongMs = millis();
     return;
   }
 

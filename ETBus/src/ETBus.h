@@ -6,6 +6,8 @@
 
 #include <ETChaCha20Poly1305.h>
 
+#define ETBUS_LIBRARY_VERSION "1.6"
+
 #ifndef ETBUS_ENABLE_ENCRYPTION
 #define ETBUS_ENABLE_ENCRYPTION 1
 #endif
