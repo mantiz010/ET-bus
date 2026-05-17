@@ -1,2 +1,3 @@
 __pycache__/
 *.py[cod]
+ETBus/examples1.05/**/secrets.h
