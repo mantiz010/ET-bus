@@ -1,278 +1,167 @@
 #include <WiFi.h>
-#include <ETBus.h>
+#include <ArduinoJson.h>
 #include <FastLED.h>
+#include <ETBus.h>
 
-// -----------------------------
-// HARD-CODED WIFI
-// -----------------------------
-static const char* WIFI_SSID = "home";
-static const char* WIFI_PASS = "test";
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#include "../../examples1.05/secrets.example.h"
+#warning "Using placeholder secrets. Copy ../../examples1.05/secrets.example.h to secrets.h and edit it before flashing real hardware."
+#endif
 
-// -----------------------------
-// WS2812B CONFIG
-// -----------------------------
-#define LED_PIN      4         // change to your data pin
-#define LED_COUNT    16         // <-- YOU SAID 15 LEDs
-#define LED_TYPE     WS2812B
-#define COLOR_ORDER  GRB
+#define LED_PIN 4
+#define LED_COUNT 16
+#define LED_TYPE WS2812B
+#define COLOR_ORDER GRB
+
+static const char* DEVICE_ID = "RGB1";
+static const char* DEVICE_NAME = "RGB Ring 1";
+static const char* FW_VERSION = "ws2812-main-1.05";
 
 CRGB leds[LED_COUNT];
-
-// -----------------------------
-// ET-BUS
-// -----------------------------
 ETBus etbus;
 
-// Light state
-static bool     isOn = true;
-static uint8_t  R = 255, G = 255, B = 255;
-static uint8_t  brightness = 255;
+bool lightOn = true;
+uint8_t red = 255;
+uint8_t green = 255;
+uint8_t blue = 255;
+uint8_t brightness = 255;
+char effect[24] = "solid";
+uint8_t speed = 120;
+uint8_t hue = 0;
+uint16_t stepNo = 0;
 
-// Effects
-static char     effect[16] = "solid";  // "solid", "rainbow", "cylon", "confetti", "pulse"
-static uint8_t  speedVal = 120;        // 1..255 (higher=faster)
+static uint16_t frameIntervalMs() {
+  const uint16_t ms = map(speed, 1, 255, 120, 12);
+  return ms < 10 ? 10 : ms;
+}
 
-// Timing
-static uint32_t lastAnimMs = 0;
-static uint16_t animStep = 0;
-
-// -----------------------------
-// WIFI CONNECT
-// -----------------------------
 static void connectWiFi() {
-  Serial.println();
-  Serial.print("[WIFI] Connecting to ");
-  Serial.println(WIFI_SSID);
-
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
-  uint32_t start = millis();
+  const uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED) {
     delay(250);
-    Serial.print(".");
     if (millis() - start > 20000) {
-      Serial.println("\n[WIFI] timeout, rebooting");
-      delay(300);
       ESP.restart();
     }
   }
-
-  Serial.println("\n[WIFI] Connected");
-  Serial.print("[WIFI] IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("[WIFI] RSSI: ");
-  Serial.println(WiFi.RSSI());
 }
 
-// -----------------------------
-// APPLY OUTPUT (solid only)
-// -----------------------------
-static void applySolid() {
-  CRGB c = isOn ? CRGB(R, G, B) : CRGB::Black;
-  for (int i = 0; i < LED_COUNT; i++) leds[i] = c;
-  FastLED.setBrightness(isOn ? brightness : 0);
-  FastLED.show();
-}
-
-// -----------------------------
-// EFFECTS ENGINE (non-blocking)
-// -----------------------------
-static uint16_t speedToIntervalMs(uint8_t s) {
-  // map 1..255 -> ~60ms..8ms
-  uint16_t ms = 60 - (uint16_t)((s * 52UL) / 255UL);
-  if (ms < 8) ms = 8;
-  return ms;
-}
-
-static void animRainbow() {
-  for (int i = 0; i < LED_COUNT; i++) {
-    leds[i] = CHSV((uint8_t)(animStep + (i * 256 / LED_COUNT)), 255, 255);
-  }
-  FastLED.setBrightness(isOn ? brightness : 0);
-  FastLED.show();
-}
-
-static void animCylon() {
-  fadeToBlackBy(leds, LED_COUNT, 40);
-  int pos = animStep % (2 * (LED_COUNT - 1));
-  if (pos >= (LED_COUNT - 1)) pos = (2 * (LED_COUNT - 1)) - pos;
-
-  leds[pos] = isOn ? CRGB(R, G, B) : CRGB::Black;
-  FastLED.setBrightness(isOn ? brightness : 0);
-  FastLED.show();
-}
-
-static void animConfetti() {
-  fadeToBlackBy(leds, LED_COUNT, 30);
-  int p = random16(LED_COUNT);
-  leds[p] += isOn ? CRGB(R, G, B) : CRGB::Black;
-  FastLED.setBrightness(isOn ? brightness : 0);
-  FastLED.show();
-}
-
-static void animPulse() {
-  uint8_t wave = sin8((uint8_t)animStep);
-  uint8_t bri = (uint16_t)brightness * wave / 255;
-  CRGB c = isOn ? CRGB(R, G, B) : CRGB::Black;
-  for (int i = 0; i < LED_COUNT; i++) leds[i] = c;
-  FastLED.setBrightness(isOn ? bri : 0);
-  FastLED.show();
-}
-
-static void runAnimation() {
-  if (!isOn) {
-    applySolid();
-    return;
-  }
-
-  if (strcmp(effect, "solid") == 0) {
-    applySolid();
+static void renderLight() {
+  if (!lightOn) {
+    fill_solid(leds, LED_COUNT, CRGB::Black);
+    FastLED.show();
     return;
   }
 
   FastLED.setBrightness(brightness);
+  const CRGB base = CRGB(red, green, blue);
 
-  if (strcmp(effect, "rainbow") == 0) animRainbow();
-  else if (strcmp(effect, "cylon") == 0) animCylon();
-  else if (strcmp(effect, "confetti") == 0) animConfetti();
-  else if (strcmp(effect, "pulse") == 0) animPulse();
-  else {
+  if (strcmp(effect, "rainbow") == 0) {
+    fill_rainbow(leds, LED_COUNT, hue++, 7);
+  } else if (strcmp(effect, "cylon") == 0) {
+    fadeToBlackBy(leds, LED_COUNT, 30);
+    leds[beatsin16(max<uint16_t>(1, speed / 2), 0, LED_COUNT - 1)] = base;
+  } else if (strcmp(effect, "confetti") == 0) {
+    fadeToBlackBy(leds, LED_COUNT, 12);
+    leds[random16(LED_COUNT)] += CHSV(hue++ + random8(64), 200, 255);
+  } else if (strcmp(effect, "chase") == 0) {
+    fill_solid(leds, LED_COUNT, CRGB::Black);
+    leds[stepNo % LED_COUNT] = base;
+  } else if (strcmp(effect, "sparkle") == 0) {
+    fill_solid(leds, LED_COUNT, CRGB::Black);
+    leds[random16(LED_COUNT)] = base;
+  } else if (strcmp(effect, "pulse") == 0) {
+    fill_solid(leds, LED_COUNT, base);
+    const uint8_t wave = (sin((stepNo % 256) * 6.2831853 / 255.0) + 1.0) * 127.5;
+    FastLED.setBrightness((uint16_t)brightness * wave / 255);
+  } else {
     strcpy(effect, "solid");
-    applySolid();
+    fill_solid(leds, LED_COUNT, base);
   }
+
+  FastLED.show();
+  stepNo++;
 }
 
-// -----------------------------
-// REPORT STATE (to HA)
-// Uses ETBus::sendState() so we can include effect + speed.
-// -----------------------------
 static void publishState() {
-  StaticJsonDocument<192> d;
-  JsonObject p = d.to<JsonObject>();
+  StaticJsonDocument<256> doc;
+  JsonObject payload = doc.to<JsonObject>();
 
-  p["on"] = isOn;
-  p["r"] = (int)R;
-  p["g"] = (int)G;
-  p["b"] = (int)B;
-  p["brightness"] = (int)brightness;
+  payload["on"] = lightOn;
+  payload["r"] = red;
+  payload["g"] = green;
+  payload["b"] = blue;
+  payload["brightness"] = brightness;
+  payload["effect"] = effect;
+  payload["speed"] = speed;
 
-  // extra keys (HA can ignore; useful for your UI + future light.py effect support)
-  p["effect"] = effect;
-  p["speed"] = (int)speedVal;
-
-  etbus.sendState(p);
+  etbus.sendState(payload);
 }
 
-// -----------------------------
-// ET-BUS COMMAND HANDLER
-// -----------------------------
 static void onEtbusCommand(const char* dev_class, JsonObject payload) {
-  Serial.print("[ETBUS] command class=");
-  Serial.println(dev_class ? dev_class : "(null)");
+  if (!dev_class || strcmp(dev_class, "light.rgb") != 0) return;
 
-  if (payload.containsKey("on")) {
-    isOn = (bool)payload["on"];
-    Serial.print("[ETBUS] on=");
-    Serial.println(isOn ? "true" : "false");
-  }
-
-  if (payload.containsKey("r")) { R = (uint8_t)((int)payload["r"]); }
-  if (payload.containsKey("g")) { G = (uint8_t)((int)payload["g"]); }
-  if (payload.containsKey("b")) { B = (uint8_t)((int)payload["b"]); }
-
-  if (payload.containsKey("brightness")) {
-    brightness = (uint8_t)((int)payload["brightness"]);
-  }
+  if (payload.containsKey("on")) lightOn = (bool)payload["on"];
+  if (payload.containsKey("r")) red = constrain((int)payload["r"], 0, 255);
+  if (payload.containsKey("g")) green = constrain((int)payload["g"], 0, 255);
+  if (payload.containsKey("b")) blue = constrain((int)payload["b"], 0, 255);
+  if (payload.containsKey("brightness")) brightness = constrain((int)payload["brightness"], 0, 255);
+  if (payload.containsKey("speed")) speed = constrain((int)payload["speed"], 1, 255);
 
   if (payload.containsKey("effect")) {
-    const char* e = payload["effect"];
-    if (e && *e) {
-      strncpy(effect, e, sizeof(effect) - 1);
-      effect[sizeof(effect) - 1] = 0;
-    }
+    const char* value = payload["effect"] | "solid";
+    strlcpy(effect, value, sizeof(effect));
   }
 
-  if (payload.containsKey("speed")) {
-    int s = (int)payload["speed"];
-    if (s < 1) s = 1;
-    if (s > 255) s = 255;
-    speedVal = (uint8_t)s;
-  }
-
-  // reset animation pacing
-  lastAnimMs = 0;
-  animStep = 0;
-
-  // immediate feedback
-  runAnimation();
+  renderLight();
   publishState();
-  Serial.println("[ETBUS] state sent");
 }
 
-// -----------------------------
-// SETUP
-// -----------------------------
 void setup() {
   Serial.begin(115200);
   delay(300);
 
-  Serial.println();
-  Serial.println("=== ET-Bus WS2812B RGB + FX ===");
-
-  // LEDs
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, LED_COUNT);
   FastLED.clear(true);
-  FastLED.setBrightness(brightness);
 
   connectWiFi();
 
-  // ET-Bus init
-  etbus.begin(
-    "rgb1",        // device id
-    "light.rgb",   // class
-    "RGB Ring 1",  // name
-    "fw-1.1"
-  );
+  if (strlen(ETBUS_PSK_HEX) == 64) {
+    etbus.enableEncryptionHex(ETBUS_PSK_HEX);
+  }
 
+  etbus.begin(DEVICE_ID, "light.rgb", DEVICE_NAME, FW_VERSION);
   etbus.onCommand(onEtbusCommand);
-  Serial.println("[ETBUS] command handler attached");
 
-  applySolid();
+  renderLight();
   publishState();
 }
 
-// -----------------------------
-// LOOP
-// -----------------------------
 void loop() {
   etbus.loop();
 
-  // WiFi keep-alive
   static uint32_t lastWifiCheck = 0;
   if (millis() - lastWifiCheck > 5000) {
     lastWifiCheck = millis();
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("[WIFI] lost, reconnecting");
-      connectWiFi();
-      publishState();
+      ESP.restart();
     }
   }
 
-  // Non-blocking animation
-  uint16_t interval = speedToIntervalMs(speedVal);
-  if (millis() - lastAnimMs >= interval) {
-    lastAnimMs = millis();
-    animStep++;
-    runAnimation();
+  static uint32_t lastFrame = 0;
+  if (millis() - lastFrame > frameIntervalMs()) {
+    lastFrame = millis();
+    renderLight();
   }
 
-  // Periodic state refresh (keeps HA + your dashboard in sync)
   static uint32_t lastState = 0;
   if (millis() - lastState > 30000) {
     lastState = millis();
     publishState();
-    Serial.println("[ETBUS] periodic state refresh");
   }
 }
