@@ -6,6 +6,7 @@
 #endif
 
 static const uint32_t PONG_INTERVAL_MS = 10000;
+static const uint32_t DISCOVER_INTERVAL_MS = 10000;
 
 ETBus::ETBus() {
   _port = ETBUS_DEFAULT_PORT;
@@ -13,6 +14,8 @@ ETBus::ETBus() {
   _hubKnown = false;
   _hubIP = IPAddress(0,0,0,0);
   _lastPongMs = 0;
+  _lastDiscoverMs = 0;
+  _seq = 0;
 
   _crypto_enabled = false;
   _kid = 1;
@@ -20,6 +23,25 @@ ETBus::ETBus() {
 
   _tx_state_ctr = 0;
   _rx_cmd_last_ctr = 0;
+  _makeBootId();
+}
+
+void ETBus::_makeBootId() {
+  uint32_t a = (uint32_t)micros();
+  uint32_t b = (uint32_t)millis();
+#if defined(ARDUINO_ARCH_ESP32)
+  b ^= (uint32_t)esp_random();
+#endif
+  static const char* H = "0123456789abcdef";
+  for (int i = 0; i < 8; i++) {
+    uint8_t v = (uint8_t)(a >> ((7 - i) * 4));
+    _bootId[i] = H[v & 0x0F];
+  }
+  for (int i = 0; i < 8; i++) {
+    uint8_t v = (uint8_t)(b >> ((7 - i) * 4));
+    _bootId[i + 8] = H[v & 0x0F];
+  }
+  _bootId[16] = 0;
 }
 
 void ETBus::setWifiNoSleep(bool on) {
@@ -214,6 +236,7 @@ void ETBus::begin(const char* device_id,
   sendDiscover();
   sendPong();
   _lastPongMs = millis();
+  _lastDiscoverMs = _lastPongMs;
 }
 
 void ETBus::onCommand(CommandHandler cb) {
@@ -221,6 +244,17 @@ void ETBus::onCommand(CommandHandler cb) {
 #if ETBUS_DEBUG
   Serial.println("[ETBUS] command handler attached");
 #endif
+}
+
+void ETBus::onSync(SyncHandler cb) {
+  _syncHandler = cb;
+#if ETBUS_DEBUG
+  Serial.println("[ETBUS] sync handler attached");
+#endif
+}
+
+bool ETBus::_discoverRateReady(unsigned long now) const {
+  return _lastDiscoverMs == 0 || now - _lastDiscoverMs >= DISCOVER_INTERVAL_MS;
 }
 
 void ETBus::_learnHub(const IPAddress& from, const char* msg_type) {
@@ -448,6 +482,8 @@ void ETBus::_sendEnvelopePlain(const char* type, JsonObject payload, bool allow_
   doc["type"] = type;
   doc["id"] = _id ? _id : "";
   doc["class"] = _class ? _class : "";
+  doc["boot"] = _bootId;
+  doc["seq"] = ++_seq;
 
   JsonObject p = doc.createNestedObject("payload");
   for (JsonPair kv : payload) {
@@ -475,6 +511,8 @@ void ETBus::_sendEnvelopeEncryptedState(JsonObject plain_payload) {
   env["type"] = "state";
   env["id"] = _id ? _id : "";
   env["class"] = _class ? _class : "";
+  env["boot"] = _bootId;
+  env["seq"] = ++_seq;
 
   JsonObject wrapper = env.createNestedObject("payload");
 
@@ -496,10 +534,16 @@ void ETBus::_sendEnvelopeEncryptedState(JsonObject plain_payload) {
 }
 
 void ETBus::sendDiscover() {
-  StaticJsonDocument<256> pdoc;
+  StaticJsonDocument<384> pdoc;
   JsonObject p = pdoc.to<JsonObject>();
   p["name"] = _name ? _name : "";
   p["fw"] = _fw ? _fw : "";
+  p["lib"] = ETBUS_LIBRARY_VERSION;
+  p["boot"] = _bootId;
+  JsonArray features = p.createNestedArray("features");
+  features.add("encrypted");
+  features.add("ack");
+  features.add("sync");
   _sendEnvelopePlain("discover", p, true);
 }
 
@@ -507,6 +551,22 @@ void ETBus::sendPong() {
   StaticJsonDocument<256> pdoc;
   JsonObject p = pdoc.to<JsonObject>();
   _sendEnvelopePlain("pong", p, true);
+}
+
+void ETBus::sendAck(const char* command_id, bool ok) {
+  StaticJsonDocument<256> pdoc;
+  JsonObject p = pdoc.to<JsonObject>();
+  p["ok"] = ok;
+  if (command_id && command_id[0]) p["cmd"] = command_id;
+  _sendEnvelopePlain("ack", p, true);
+}
+
+void ETBus::sendError(const char* code, const char* message) {
+  StaticJsonDocument<384> pdoc;
+  JsonObject p = pdoc.to<JsonObject>();
+  p["code"] = code ? code : "error";
+  if (message && message[0]) p["message"] = message;
+  _sendEnvelopePlain("error", p, true);
 }
 
 void ETBus::sendState(JsonObject payload) {
@@ -571,9 +631,20 @@ void ETBus::loop() {
   if (!payload.isNull() && (type[0]=='p' && type[1]=='i' && type[2]=='n' && type[3]=='g')) {
     _learnHub(from, "ping");
     _maybeLearnPortFromPing(payload);
-    sendDiscover();
+    unsigned long now = millis();
+    if (_discoverRateReady(now)) {
+      sendDiscover();
+      _lastDiscoverMs = now;
+    }
     sendPong();
-    _lastPongMs = millis();
+    _lastPongMs = now;
+    if (_syncHandler) _syncHandler();
+    return;
+  }
+
+  if (type[0]=='s' && type[1]=='y' && type[2]=='n' && type[3]=='c') {
+    _learnHub(from, "sync");
+    if (_syncHandler) _syncHandler();
     return;
   }
 

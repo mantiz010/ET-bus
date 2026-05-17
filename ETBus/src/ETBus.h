@@ -6,7 +6,7 @@
 
 #include <ETChaCha20Poly1305.h>
 
-#define ETBUS_LIBRARY_VERSION "1.6"
+#define ETBUS_LIBRARY_VERSION "1.7"
 
 #ifndef ETBUS_ENABLE_ENCRYPTION
 #define ETBUS_ENABLE_ENCRYPTION 1
@@ -40,6 +40,7 @@
 class ETBus {
 public:
   typedef void (*CommandHandler)(const char* dev_class, JsonObject payload);
+  typedef void (*SyncHandler)();
 
   ETBus();
 
@@ -50,6 +51,7 @@ public:
 
   void loop();
   void onCommand(CommandHandler cb);
+  void onSync(SyncHandler cb);
 
   void setPort(uint16_t port);
   uint16_t port() const { return _port; }
@@ -57,6 +59,8 @@ public:
   // Plaintext discovery plane
   void sendDiscover();
   void sendPong();
+  void sendAck(const char* command_id = nullptr, bool ok = true);
+  void sendError(const char* code, const char* message = nullptr);
 
   // State (will encrypt if enabled)
   void sendState(JsonObject payload);
@@ -82,6 +86,8 @@ private:
   // Hub learn
   void _learnHub(const IPAddress& from, const char* msg_type);
   void _maybeLearnPortFromPing(JsonObject payload);
+  bool _discoverRateReady(unsigned long now) const;
+  void _makeBootId();
 
   // Crypto
   void _deriveKeyFromPskAndId();        // key = sha256(psk||device_id)
@@ -116,6 +122,7 @@ private:
   const char* _fw = nullptr;
 
   CommandHandler _cmdHandler = nullptr;
+  SyncHandler _syncHandler = nullptr;
 
   // Network
   IPAddress _mcastIP = IPAddress(ETBUS_MCAST_A, ETBUS_MCAST_B, ETBUS_MCAST_C, ETBUS_MCAST_D);
@@ -125,6 +132,9 @@ private:
   IPAddress _hubIP;
 
   unsigned long _lastPongMs = 0;
+  unsigned long _lastDiscoverMs = 0;
+  uint32_t _seq = 0;
+  char _bootId[17] = {0};
 
   // Crypto state
   bool _crypto_enabled = false;
